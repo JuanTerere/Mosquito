@@ -119,8 +119,8 @@ button{font:inherit;color:inherit}
   animation:wob 1.6s ease-in-out infinite}
 #scr-intro{background:#000;padding:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .intro-wrap{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;display:flex;align-items:center;justify-content:center}
-#introVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center}
-.skip{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);right:14px;margin:0;padding:8px 16px;font-size:13px;width:auto}
+#introVideo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:100%;height:100%;min-width:100%;min-height:100%;object-fit:cover;object-position:center}
+.btn.skip{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);right:14px;margin:0;padding:8px 16px;font-size:13px;width:auto;display:inline-block}
 .intro-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);margin:0;width:auto;
   display:flex;flex-direction:column;align-items:center;gap:8px;font-size:34px;padding:22px 30px;
   border-radius:20px;background:rgba(13,24,10,.72);border:3px solid #fff}
@@ -1489,6 +1489,22 @@ function goWelcome() { showScreen('welcome'); }
 (function initIntro() {
   const v = $('introVideo'), playBtn = $('btnPlayIntro');
   let advanced = false;
+  // Algunos navegadores Android calculan mal el "cover" de un <video> vertical
+  // (se ve recortado/zoomeado en vez de cubrir la pantalla). Para evitarlo,
+  // calculamos el tamaño en píxeles a mano usando las dimensiones reales del
+  // video en vez de depender solo de object-fit.
+  function fitIntroVideo() {
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    const vh = document.documentElement.clientHeight || window.innerHeight;
+    const iw = v.videoWidth || 720, ih = v.videoHeight || 1280;
+    const scale = Math.max(vw / iw, vh / ih);
+    v.style.width = Math.ceil(iw * scale) + 'px';
+    v.style.height = Math.ceil(ih * scale) + 'px';
+  }
+  v.addEventListener('loadedmetadata', fitIntroVideo);
+  window.addEventListener('resize', fitIntroVideo);
+  window.addEventListener('orientationchange', () => setTimeout(fitIntroVideo, 200));
+  fitIntroVideo();
   const advance = () => { if (advanced) return; advanced = true; goWelcome(); };
   const showIntroError = msg => {
     playBtn.hidden = true;
