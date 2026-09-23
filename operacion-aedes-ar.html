@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d180a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Operación Aedes AR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0d180a; --navy2:#1b2b12; --red:#e0312b; --blue:#4f7942;
+  --yellow:#ffd23f; --lime:#8dff4a; --sky:#c9d76a;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  --display:'Bungee','Arial Black',Impact,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--navy);color:#fff;
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  touch-action:none;user-select:none;-webkit-user-select:none;overscroll-behavior:none}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit}
+
+#app{position:fixed;inset:0;overflow:hidden;background:var(--navy)}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;z-index:0}
+#cam.on{opacity:1}
+#game{position:absolute;inset:0;width:100%;height:100%;z-index:1;touch-action:none}
+#app::after{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 55%,rgba(5,10,30,.5) 100%)}
+
+#flash{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:0}
+#flash.bite{background:radial-gradient(circle,transparent 30%,rgba(255,30,30,.65));animation:fl .55s ease-out}
+#flash.zap{background:rgba(80,160,255,.16);animation:fl .18s ease-out}
+#flash.spon{background:rgba(255,160,40,.55);animation:fl .7s ease-out}
+@keyframes fl{0%{opacity:1}100%{opacity:0}}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;inset:0;z-index:5;pointer-events:none;
+  padding:calc(10px + var(--sat)) 12px calc(12px + var(--sab));
+  display:flex;flex-direction:column;justify-content:space-between}
+.hud-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.panel{background:rgba(13,24,10,.78);border:2.5px solid #fff;border-radius:14px;padding:8px 10px;
+  box-shadow:0 4px 0 rgba(0,0,0,.4);backdrop-filter:blur(3px)}
+.hud-left{min-width:0;max-width:60%}
+.lvl{font-size:11px;font-weight:800;color:var(--yellow);line-height:1.2}
+.score{font-family:var(--display);font-size:21px;line-height:1.15;margin-top:2px}
+.score b{font-weight:400}
+.barrio{font-size:11px;opacity:.85;margin:2px 0 6px}
+.row{display:flex;align-items:center;gap:6px}
+.row small,.base-panel small{font-size:10px;font-weight:800;opacity:.9;white-space:nowrap}
+.bar{flex:1;height:10px;border-radius:99px;background:rgba(0,0,0,.55);border:2px solid #fff;overflow:hidden;min-width:60px}
+.bar>i{display:block;height:100%;width:0;transition:width .25s}
+#chargeBar{background:linear-gradient(#bfe08a,#4f7942)}
+#baseBar{background:linear-gradient(#ff9b6b,#e0312b)}
+#bannerBar{background:linear-gradient(#fff,#ffd23f);transition:none}
+.hud-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.lives{display:flex;gap:2px}
+.heart{font-size:24px;line-height:1;color:#ff3b5c;text-shadow:0 2px 0 rgba(0,0,0,.55)}
+.heart.off{color:#39415a}
+.base-panel{width:132px;padding:6px 9px}
+.base-panel .bar{margin-top:3px;width:100%}
+.tools{display:flex;gap:6px}
+.tools button{pointer-events:auto;width:38px;height:38px;border-radius:50%;border:2.5px solid #fff;
+  background:rgba(13,24,10,.8);font-size:16px;line-height:1;padding:0;box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.tools button:active{transform:translateY(2px)}
+
+#banner{position:absolute;top:calc(var(--sat) + 138px);left:50%;transform:translateX(-50%);
+  min-width:230px;background:var(--red);border:3px solid #7a0d0a;border-radius:12px;padding:6px 14px 8px;
+  text-align:center;font-family:var(--display);font-size:15px;box-shadow:0 4px 0 rgba(0,0,0,.4);
+  animation:pulse .45s infinite alternate}
+#banner .bar{margin-top:6px;width:100%;height:8px}
+@keyframes pulse{from{transform:translateX(-50%) scale(1)}to{transform:translateX(-50%) scale(1.05)}}
+
+#toast{position:absolute;top:calc(var(--sat) + 205px);left:50%;transform:translate(-50%,-6px);opacity:0;
+  transition:opacity .25s,transform .25s;background:rgba(0,0,0,.74);border:2px solid var(--yellow);
+  border-radius:12px;padding:8px 14px;font-weight:700;font-size:14px;text-align:center;max-width:86%}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+.hud-bottom{display:flex;justify-content:space-between;align-items:flex-end}
+.col-left{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.col-right{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+#radar{width:96px;height:96px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 0 rgba(0,0,0,.4)}
+
+#btnSponsor{pointer-events:auto;position:relative;overflow:hidden;width:78px;height:78px;border-radius:18px;
+  border:3px solid #fff;background:linear-gradient(135deg,#ffb15a,#e8590c);
+  box-shadow:0 5px 0 #8a3204;padding:0;cursor:pointer}
+#btnSponsor .sp-fill{position:absolute;left:0;right:0;top:0;height:100%;background:#0d180a;opacity:.74;transition:height .3s}
+#btnSponsor .sp-txt{position:relative;z-index:1;display:block;font-family:var(--display);font-size:11px;line-height:1.15;
+  text-shadow:0 2px 0 rgba(0,0,0,.55)}
+#btnSponsor .sp-txt em{font-style:normal;color:var(--yellow);font-size:10px}
+#btnSponsor:disabled{filter:saturate(.5);cursor:default}
+#btnSponsor.ready{animation:bounce .5s infinite alternate;box-shadow:0 5px 0 #8a3204,0 0 22px rgba(255,170,60,.95)}
+@keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-6px)}}
+
+.ammo{display:flex;gap:6px;padding:6px 10px;background:rgba(13,24,10,.78);border:2.5px solid #fff;border-radius:99px;
+  box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.pip{width:12px;height:18px;border-radius:50% 50% 50% 50%/62% 62% 38% 38%;background:#3b4a78;border:2px solid #fff}
+.pip.on{background:var(--sky)}
+.ammo.reloading .pip{animation:blink .3s infinite alternate}
+@keyframes blink{from{opacity:.25}to{opacity:.9}}
+
+#btnZap{pointer-events:auto;width:112px;height:112px;border-radius:50%;border:4px solid #fff;cursor:pointer;
+  font-family:var(--display);font-size:30px;color:#fff;
+  background:radial-gradient(circle at 35% 30%,#a9d17c,#4f7942 55%,#23401b);
+  box-shadow:0 6px 0 #16260d,0 0 24px rgba(107,168,68,.85);text-shadow:0 2px 0 #16260d}
+#btnZap:active{transform:translateY(4px);box-shadow:0 2px 0 #16260d,0 0 30px rgba(107,168,68,.95)}
+#btnZap.lock{box-shadow:0 6px 0 #16260d,0 0 30px rgba(141,255,74,.95);border-color:var(--lime)}
+
+/* ---------- PANTALLAS ---------- */
+.screen{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;
+  padding:calc(16px + var(--sat)) 16px calc(16px + var(--sab));overflow:auto;touch-action:pan-y;
+  background:radial-gradient(circle at 50% 15%,rgba(90,140,50,.38),rgba(8,14,6,.95) 62%)}
+.card{width:100%;max-width:400px;margin:auto;background:rgba(14,24,11,.94);border:3px solid #fff;border-radius:22px;
+  padding:22px 20px;text-align:center;box-shadow:0 8px 0 rgba(0,0,0,.4)}
+.logo{width:150px;max-width:60%;height:auto;display:block;margin:0 auto;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45));
+  animation:wob 1.6s ease-in-out infinite}
+#scr-intro{background:#000;padding:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.intro-wrap{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#introVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center}
+.skip{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);right:14px;margin:0;padding:8px 16px;font-size:13px;width:auto}
+.intro-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);margin:0;width:auto;
+  display:flex;flex-direction:column;align-items:center;gap:8px;font-size:34px;padding:22px 30px;
+  border-radius:20px;background:rgba(13,24,10,.72);border:3px solid #fff}
+.intro-play span{font-size:13px;font-weight:800;letter-spacing:.02em}
+.intro-error{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:80%;max-width:340px;
+  text-align:center;color:#fff;font-weight:800;font-size:16px;background:rgba(13,24,10,.85);
+  border:3px solid var(--red);border-radius:16px;padding:20px}
+.intro-error small{display:block;margin-top:8px;font-weight:600;font-size:12.5px;color:#d7e0bd}
+.warn-title{font-size:26px;line-height:1.2;color:#fff;text-shadow:0 3px 0 #000;margin:4px 0 10px}
+.warn-title span{color:var(--red);text-shadow:0 3px 0 #4a0d0a}
+#playerName{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;border:2px solid rgba(255,255,255,.4);
+  background:rgba(0,0,0,.35);color:#fff;font-size:15px;margin-bottom:10px;font-family:inherit}
+#playerName::placeholder{color:#9fae8a}
+.tip-icon{font-size:46px;text-align:center;margin-bottom:4px}
+.rank-badge{display:block;margin:6px auto 16px;padding:10px 22px;border-radius:14px;width:fit-content;max-width:90%;
+  background:linear-gradient(180deg,#ffd23f,#c99a1f);color:#2a2107;font-weight:800;font-size:18px;
+  border:3px solid #fff;box-shadow:0 4px 0 rgba(0,0,0,.35)}
+@keyframes wob{0%,100%{transform:rotate(-8deg) translateY(0)}50%{transform:rotate(8deg) translateY(-6px)}}
+h1{font-family:var(--display);font-weight:400;font-size:34px;line-height:1;margin:8px 0 10px;color:var(--yellow);
+  text-shadow:0 3px 0 #b8860b,0 6px 0 rgba(0,0,0,.4)}
+h1 span{color:var(--sky);text-shadow:0 3px 0 #6b7a2a,0 6px 0 rgba(0,0,0,.4)}
+h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;color:var(--yellow)}
+.card p{margin:0 0 12px;font-size:14px;line-height:1.45;color:#dfe8cf}
+.how{list-style:none;margin:0 0 14px;padding:12px 14px;background:rgba(0,0,0,.35);border-radius:12px;text-align:left;
+  font-size:13px;line-height:1.4;color:#d7e0bd}
+.how li+li{margin-top:6px}
+.fine{margin-top:14px;font-size:11.5px;line-height:1.4;color:#9fae8a}
+.btn{display:block;width:100%;margin:10px 0 0;padding:14px 16px;border-radius:14px;border:3px solid #fff;background:var(--blue);
+  color:#fff;font-family:var(--display);font-size:17px;letter-spacing:.03em;box-shadow:0 5px 0 #16260d;cursor:pointer}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 #16260d}
+.btn.primary{background:linear-gradient(#ffdc5c,#ffb703);color:#3a2400;box-shadow:0 5px 0 #a86b00;font-size:20px}
+.btn.primary:active{box-shadow:0 2px 0 #a86b00}
+.btn.ghost{background:transparent;box-shadow:none;border-color:rgba(255,255,255,.4);font-size:14px}
+.btn:disabled{opacity:.6}
+
+#tacticalMap{width:100%;height:260px;border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,.35);background:#0e1a3d}
+#mapFallback{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;padding:2px}
+#countryList{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;padding:2px;margin-bottom:8px}
+.city-btn{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;
+  border:2px solid #fff;color:#fff;font-weight:700;font-size:13px;text-align:left;cursor:pointer}
+.city-btn small{font-weight:600;opacity:.85;white-space:nowrap}
+#btnLocate{margin-bottom:10px;font-size:14px}
+#btnLocate.busy{opacity:.7}
+.alarm-banner{margin:12px 0 8px;padding:7px 10px;border-radius:10px;border:2px solid #fff;font-family:var(--display);font-size:14px;color:#fff;
+  text-shadow:0 2px 0 rgba(0,0,0,.45)}
+.bar.big{height:12px;width:100%}
+#barrioInfo small{display:block;margin-top:8px;font-size:11.5px;line-height:1.4;color:#9aa7d6}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.stats div{background:rgba(0,0,0,.35);border-radius:12px;padding:10px 6px}
+.stats b{display:block;font-family:var(--display);font-weight:400;font-size:22px;color:var(--yellow)}
+.stats span{font-size:11.5px;color:#aab6e6}
+.record{display:inline-block;background:var(--yellow);color:#3a2400;font-family:var(--display);font-size:13px;
+  padding:4px 12px;border-radius:99px;margin-bottom:8px}
+.tip{background:rgba(90,140,50,.22);border:2px solid rgba(255,255,255,.3);border-radius:12px;padding:10px 12px!important;
+  font-size:13px!important;text-align:left}
+
+@media (max-height:640px){
+  .logo{width:110px} h1{font-size:28px} .card{padding:16px 16px}
+  #btnZap{width:96px;height:96px;font-size:26px}
+}
+@media (prefers-reduced-motion:reduce){
+  .logo,#banner,#btnSponsor.ready{animation:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="cam" autoplay playsinline muted></video>
+  <canvas id="game"></canvas>
+  <div id="flash"></div>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud" hidden>
+    <div class="hud-top">
+      <div class="panel hud-left">
+        <div class="lvl" id="lvl">Nivel 1</div>
+        <div class="score">PUNTOS <b id="score">0</b></div>
+        <div class="barrio" id="barrioTag"></div>
+        <div class="row"><small>Energía</small><div class="bar"><i id="chargeBar"></i></div></div>
+      </div>
+      <div class="hud-right">
+        <div class="lives" id="lives"></div>
+        <div class="panel base-panel"><small id="baseName">Criadero</small><div class="bar"><i id="baseBar"></i></div></div>
+        <div class="tools">
+          <button id="btnPause" aria-label="Pausa">⏸</button>
+          <button id="btnSound" aria-label="Sonido">🔊</button>
+          <button id="btnCam" aria-label="Reintentar cámara">📷</button>
+          <button id="btnCenter" aria-label="Recentrar la vista">⌖</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="banner" hidden>¡CRIADERO VULNERABLE!<div class="bar"><i id="bannerBar"></i></div></div>
+    <div id="toast"></div>
+
+    <div class="hud-bottom">
+      <div class="col-left">
+        <button id="btnSponsor" disabled><span class="sp-fill" id="spFill"></span><span class="sp-txt">ATAQUE<br><em id="spName">SPONSOR</em></span></button>
+        <canvas id="radar" width="96" height="96"></canvas>
+      </div>
+      <div class="col-right">
+        <div class="ammo" id="ammo"></div>
+        <button id="btnZap">ZAP!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== INTRO (video de 10s del General Mosquito) ===== -->
+  <section class="screen" id="scr-intro">
+    <div class="intro-wrap">
+      <video id="introVideo" src="assets/intro.mp4" playsinline preload="auto" muted></video>
+      <button class="intro-play" id="btnPlayIntro">▶<span>TOCÁ PARA ESCUCHAR AL GENERAL</span></button>
+      <button class="btn ghost skip" id="btnSkipIntro">Saltar ▶</button>
+    </div>
+  </section>
+
+  <!-- ===== BIENVENIDA / CARTEL DE GUERRA ===== -->
+  <section class="screen" id="scr-welcome" hidden>
+    <div class="card">
+      <img class="logo" src="assets/a_la_guerra.png" alt="General mosquito llamando a la guerra">
+      <h1 class="warn-title">LA INVASIÓN DE<br><span>AEDES AEGYPTI</span><br>HA COMENZADO</h1>
+      <p>Los criaderos se multiplican barrio por barrio. Necesitamos gente en el terreno, cámara en mano, lista para encontrarlos y destruirlos antes de que sea tarde.</p>
+      <button class="btn primary" id="btnJoin">UNIRME A LA RESISTENCIA</button>
+    </div>
+  </section>
+
+  <!-- ===== MENÚ ===== -->
+  <section class="screen" id="scr-menu" hidden>
+    <div class="card">
+      <img class="logo" src="assets/a_la_guerra.png" alt="General mosquito llamando a la guerra">
+      <h1>OPERACIÓN<br>AEDES <span>AR</span></h1>
+      <p>Los mosquitos salen de un criadero escondido en tu barrio. Buscalos con la cámara, eliminalos y destruí el criadero antes de que te piquen.</p>
+      <ul class="how">
+        <li>🎯 Girá el teléfono y apuntá con la mira. Tocá <b>ZAP!</b> para disparar.</li>
+        <li>⚡ Cada mosquito eliminado carga la energía. Con la energía llena cae el escudo del criadero.</li>
+        <li>🛞 Seguí la flecha, encontralo y disparale antes de que se acabe el tiempo.</li>
+      </ul>
+      <button class="btn primary" id="btnStart">INICIAR ASALTO</button>
+      <button class="btn" id="btnMap">🗺️ MAPA TÁCTICO</button>
+      <button class="btn" id="btnRecruit">🪖 RECLUTADOS</button>
+      <div class="fine">Pide permiso de cámara y de movimiento. Necesita HTTPS (o localhost); si no, el navegador bloquea la cámara y se activa un modo práctica sin ella. Sin sensores podés arrastrar el dedo para mirar alrededor.<br><span id="bestLine"></span></div>
+    </div>
+  </section>
+
+  <!-- ===== MAPA TÁCTICO ===== -->
+  <section class="screen" id="scr-map" hidden>
+    <div class="card">
+      <h2>MAPA TÁCTICO</h2>
+      <p>Elegí una ciudad o usá tu ubicación real para desplegarte en tu propio barrio.</p>
+      <div class="row" style="gap:8px;margin-bottom:8px">
+        <button class="btn ghost" id="btnCountry" style="margin:0;flex:1">🌎 Paraguay ▾</button>
+      </div>
+      <div id="countryList" class="map-fallback-list" hidden></div>
+      <button class="btn ghost" id="btnLocate">📍 USAR MI UBICACIÓN (GPS)</button>
+      <div id="tacticalMap" role="img" aria-label="Mapa con ciudades afectadas" hidden></div>
+      <div id="mapFallback" hidden></div>
+      <div id="barrioInfo"></div>
+      <button class="btn primary" id="btnMapGo">DESPLEGAR</button>
+      <button class="btn ghost" id="btnMapBack">Volver</button>
+    </div>
+  </section>
+
+  <!-- ===== PAUSA ===== -->
+  <section class="screen" id="scr-pause" hidden>
+    <div class="card">
+      <h2>PAUSA</h2>
+      <p>Los mosquitos esperan. Cuando quieras, seguimos.</p>
+      <button class="btn primary" id="btnResume">SEGUIR</button>
+      <button class="btn ghost" id="btnQuit">Salir al menú</button>
+    </div>
+  </section>
+
+  <!-- ===== RESULTADO ===== -->
+  <section class="screen" id="scr-result" hidden>
+    <div class="card">
+      <div class="record" id="resRecord" hidden>¡NUEVO RÉCORD!</div>
+      <h2 id="resTitle">Resultado</h2>
+      <p id="resSub"></p>
+      <div class="stats">
+        <div><b id="stScore">0</b><span>Puntos</span></div>
+        <div><b id="stKills">0</b><span>Mosquitos</span></div>
+        <div><b id="stAcc">0%</b><span>Puntería</span></div>
+        <div><b id="stBites">0</b><span>Picaduras</span></div>
+      </div>
+      <p class="tip" id="tip"></p>
+      <button class="btn primary" id="btnContinue">CONTINUAR</button>
+      <button class="btn" id="btnShareWA">📲 COMPARTIR EN WHATSAPP</button>
+      <button class="btn" id="btnShare">COMPARTIR PUNTAJE</button>
+    </div>
+  </section>
+
+  <!-- ===== REGISTRO (primera vez que ganás) ===== -->
+  <section class="screen" id="scr-register" hidden>
+    <div class="card">
+      <div class="tip-icon">🎖️</div>
+      <h2>¡FELICITACIONES!</h2>
+      <p>Ya sos parte de la <b>Resistencia</b>. Escribí tu nombre para que te mandemos las coordenadas y la estrategia para vencer al enemigo.</p>
+      <input type="text" id="playerName" maxlength="24" placeholder="Tu nombre de combate" autocomplete="off">
+      <button class="btn primary" id="btnRegister">CONFIRMAR</button>
+      <button class="btn ghost" id="btnSkipRegister">Ahora no</button>
+    </div>
+  </section>
+
+  <!-- ===== CARTEL EDUCATIVO (después de cada partida, gane o pierda) ===== -->
+  <section class="screen" id="scr-tip" hidden>
+    <div class="card">
+      <div class="tip-icon" id="tipIcon">🥚</div>
+      <h2 id="tipTitle">Título</h2>
+      <p id="tipBody"></p>
+      <button class="btn primary" id="btnTipGo">SEGUIR LUCHANDO</button>
+    </div>
+  </section>
+
+  <!-- ===== ASCENSO DE RANGO ===== -->
+  <section class="screen" id="scr-promo" hidden>
+    <div class="card">
+      <div class="tip-icon">🎖️</div>
+      <h2>¡ASCENSO!</h2>
+      <p>Destruiste <b id="promoCount">0</b> criaderos. Tu nuevo rango en la Resistencia es:</p>
+      <div class="rank-badge" id="promoRank">Soldado</div>
+      <button class="btn primary" id="btnPromoWA">📲 COMPARTIR EN WHATSAPP</button>
+      <button class="btn" id="btnPromoShare">COMPARTIR</button>
+      <button class="btn ghost" id="btnPromoGo">SEGUIR LUCHANDO</button>
+    </div>
+  </section>
+
+  <!-- ===== RECLUTAMIENTO ===== -->
+  <section class="screen" id="scr-recruit" hidden>
+    <div class="card">
+      <div class="tip-icon">🪖</div>
+      <h2>RECLUTAMIENTO</h2>
+      <p>Invitá gente a defender su barrio. Cuantas más invitaciones mandes, más alto tu rango de reclutador.</p>
+      <div class="rank-badge" id="recruitRank">Sin reclutas</div>
+      <div class="stats" style="margin-bottom:14px">
+        <div><b id="recruitCount">0</b><span>Invitaciones enviadas</span></div>
+        <div><b id="recruitCode">------</b><span>Tu código</span></div>
+      </div>
+      <button class="btn primary" id="btnInviteWA">📲 INVITAR POR WHATSAPP</button>
+      <button class="btn" id="btnInviteShare">COMPARTIR INVITACIÓN</button>
+      <p class="fine">Por ahora contamos las invitaciones que enviás desde este celular. El ranking internacional de reclutadores (con reclutas confirmados) llega en cuanto sumemos un servidor propio para eso.</p>
+      <button class="btn ghost" id="btnRecruitBack">Volver</button>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   OPERACIÓN AEDES AR
+   Un solo archivo, sin librerías. Necesita HTTPS (o localhost) para
+   que el navegador deje usar la cámara y los sensores de movimiento.
+   ===================================================================== */
+
+/* ---------------------- CONFIGURACIÓN (tocá acá) ---------------------- */
+const CFG = {
+  vfov: 65,            // campo de visión vertical de la cámara del celu (grados). Ajustalo si los bichos "patinan" al girar
+  killsToExpose: 8,    // mosquitos a eliminar para que caiga el escudo del criadero
+  exposeSeconds: 9,    // tiempo que el criadero queda vulnerable
+  baseDamage: 10,      // daño por disparo al criadero
+  ammoMax: 5,          // balas por cargador
+  reloadSeconds: 1.1,  // tiempo de recarga
+  lives: 3,
+  hitAssist: 40,       // tolerancia de puntería (px). Más alto = más fácil
+  sponsor: { name: 'TU MARCA' },  // nombre que aparece en el botón "Ataque Sponsor"
+  // Clave de la API de Google Maps (Maps JavaScript API + Geocoding API habilitadas).
+  // Sacala gratis en https://console.cloud.google.com/google/maps-apis — sin ella,
+  // el mapa cae automáticamente a una lista de ciudades sin mapa visual.
+  mapsApiKey: 'TU_CLAVE_DE_GOOGLE_MAPS_AQUI'
+};
+
+const LEVEL_TITLES = ['Recluta de Barrio','Escuadrón Táctico','Protector del Paraguay','Comandante Anti-Dengue','Leyenda del Descacharreo'];
+
+const TYPES = {
+  comun:   { pts:100, hp:1, spd:1,    scale:1,    sprite:'soldado', filter:'none' },
+  veloz:   { pts:150, hp:1, spd:1.8,  scale:.85,  sprite:'soldado', filter:'hue-rotate(205deg) saturate(1.5) brightness(1.05)' },
+  tigre:   { pts:250, hp:2, spd:.85,  scale:1.3,  sprite:'soldado', filter:'hue-rotate(-25deg) saturate(1.7) brightness(1.05)' },
+  general: { pts:600, hp:5, spd:.6,   scale:1.9,  sprite:'general', filter:'none' }
+};
+const SPRITE_W = { soldado:46, general:66 };  // ancho base (unidades locales) de cada tipo de arte
+const SPRITES = {
+  soldado: [new Image(), new Image()],
+  general: [new Image(), new Image()]
+};
+SPRITES.soldado[0].src = 'assets/mosquito_soldado_1.png';
+SPRITES.soldado[1].src = 'assets/mosquito_soldado_2.png';
+SPRITES.general[0].src = 'assets/mosquito_general_1.png';
+SPRITES.general[1].src = 'assets/mosquito_general_2.png';
+const BASE_NAMES = ['Llanta con agua','Balde olvidado','Latas y botellas'];
+
+/* Países soportados. Cada uno tiene sus ciudades reales "atacadas" en el mapa.
+   Arrancamos con Paraguay como país principal; Argentina, Brasil y los de
+   Centroamérica ya están cargados para cuando se habilite la expansión —
+   agregar un país nuevo es solo sumar una entrada acá, nada más del código
+   necesita tocarse. */
+const COUNTRIES = {
+  PY: { name:'Paraguay', center:{ lat:-23.6, lng:-58.1 }, zoom:6.3, cities:[
+    { id:'asuncion',    name:'Asunción (Centro)',      lat:-25.2637, lng:-57.5759 },
+    { id:'sanlorenzo',  name:'San Lorenzo',            lat:-25.3400, lng:-57.5088 },
+    { id:'luque',       name:'Luque',                  lat:-25.2699, lng:-57.4875 },
+    { id:'capiata',     name:'Capiatá',                lat:-25.3556, lng:-57.4453 },
+    { id:'lambare',     name:'Lambaré',                lat:-25.3467, lng:-57.6062 },
+    { id:'fernando',    name:'Fernando de la Mora',    lat:-25.3208, lng:-57.5347 },
+    { id:'nemby',       name:'Ñemby',                  lat:-25.3958, lng:-57.5342 },
+    { id:'limpio',      name:'Limpio',                 lat:-25.1667, lng:-57.4833 },
+    { id:'itaugua',     name:'Itauguá',                lat:-25.3958, lng:-57.3550 },
+    { id:'mra',         name:'Mariano Roque Alonso',   lat:-25.2000, lng:-57.5333 },
+    { id:'villaelisa',  name:'Villa Elisa',            lat:-25.3667, lng:-57.5972 },
+    { id:'cde',         name:'Ciudad del Este',        lat:-25.5163, lng:-54.6114 },
+    { id:'encarnacion', name:'Encarnación',            lat:-27.3309, lng:-55.8663 },
+    { id:'coronel',     name:'Coronel Oviedo',         lat:-25.4167, lng:-56.4333 },
+    { id:'pjc',         name:'Pedro Juan Caballero',   lat:-22.5470, lng:-55.7333 },
+    { id:'concepcion',  name:'Concepción',             lat:-23.4064, lng:-57.4333 }
+  ]},
+  AR: { name:'Argentina', center:{ lat:-38.4, lng:-63.6 }, zoom:4.3, cities:[
+    { id:'caba',        name:'CABA (Buenos Aires)',    lat:-34.6037, lng:-58.3816 },
+    { id:'laplata',     name:'La Plata',               lat:-34.9215, lng:-57.9545 },
+    { id:'cordoba',     name:'Córdoba',                lat:-31.4201, lng:-64.1888 },
+    { id:'rosario',     name:'Rosario',                lat:-32.9468, lng:-60.6393 },
+    { id:'mendoza',     name:'Mendoza',                lat:-32.8895, lng:-68.8458 },
+    { id:'tucuman',     name:'San Miguel de Tucumán',  lat:-26.8241, lng:-65.2226 },
+    { id:'salta',       name:'Salta',                  lat:-24.7859, lng:-65.4117 },
+    { id:'mardelplata', name:'Mar del Plata',          lat:-37.9979, lng:-57.5495 },
+    { id:'resistencia', name:'Resistencia',            lat:-27.4514, lng:-58.9867 },
+    { id:'posadas',     name:'Posadas',                lat:-27.3671, lng:-55.8961 }
+  ]},
+  BR: { name:'Brasil', center:{ lat:-14.2, lng:-51.9 }, zoom:4, cities:[
+    { id:'saopaulo',    name:'São Paulo',              lat:-23.5505, lng:-46.6333 },
+    { id:'rio',         name:'Rio de Janeiro',         lat:-22.9068, lng:-43.1729 },
+    { id:'brasilia',    name:'Brasília',               lat:-15.7939, lng:-47.8828 },
+    { id:'salvador',    name:'Salvador',               lat:-12.9777, lng:-38.5016 },
+    { id:'fortaleza',   name:'Fortaleza',              lat:-3.7319,  lng:-38.5267 },
+    { id:'belohorizonte', name:'Belo Horizonte',       lat:-19.9167, lng:-43.9345 },
+    { id:'curitiba',    name:'Curitiba',               lat:-25.4284, lng:-49.2733 },
+    { id:'manaus',      name:'Manaus',                 lat:-3.1190,  lng:-60.0217 },
+    { id:'recife',      name:'Recife',                 lat:-8.0476,  lng:-34.8770 },
+    { id:'fozdoiguacu', name:'Foz do Iguaçu',          lat:-25.5163, lng:-54.5854 }
+  ]},
+  GT: { name:'Guatemala', center:{ lat:15.78, lng:-90.23 }, zoom:7, cities:[
+    { id:'guatecity',    name:'Ciudad de Guatemala',   lat:14.6349, lng:-90.5069 },
+    { id:'quetzaltenango', name:'Quetzaltenango',      lat:14.8447, lng:-91.5181 },
+    { id:'escuintla',    name:'Escuintla',             lat:14.3050, lng:-90.7850 }
+  ]},
+  CR: { name:'Costa Rica', center:{ lat:9.75, lng:-83.75 }, zoom:8, cities:[
+    { id:'sanjosecr',    name:'San José',              lat:9.9281,  lng:-84.0907 },
+    { id:'alajuela',     name:'Alajuela',              lat:10.0162, lng:-84.2116 },
+    { id:'limoncr',      name:'Limón',                 lat:9.9908,  lng:-83.0347 }
+  ]},
+  PA: { name:'Panamá', center:{ lat:8.54, lng:-80.78 }, zoom:7, cities:[
+    { id:'panamacity',   name:'Ciudad de Panamá',      lat:8.9824,  lng:-79.5199 },
+    { id:'colon',        name:'Colón',                 lat:9.3592,  lng:-79.9014 },
+    { id:'david',        name:'David',                 lat:8.4333,  lng:-82.4333 }
+  ]},
+  HN: { name:'Honduras', center:{ lat:14.9, lng:-86.6 }, zoom:7, cities:[
+    { id:'tegucigalpa',  name:'Tegucigalpa',           lat:14.0723, lng:-87.1921 },
+    { id:'sanpedrosula', name:'San Pedro Sula',        lat:15.5042, lng:-88.0250 },
+    { id:'laceiba',      name:'La Ceiba',              lat:15.7597, lng:-86.7822 },
+    { id:'choloma',      name:'Choloma',               lat:15.6136, lng:-87.9522 }
+  ]},
+  SV: { name:'El Salvador', center:{ lat:13.79, lng:-88.9 }, zoom:8, cities:[
+    { id:'sansalvador',  name:'San Salvador',          lat:13.6929, lng:-89.2182 },
+    { id:'santaana',     name:'Santa Ana',             lat:13.9942, lng:-89.5592 },
+    { id:'sanmiguelsv',  name:'San Miguel',            lat:13.4833, lng:-88.1833 },
+    { id:'soyapango',    name:'Soyapango',             lat:13.7167, lng:-89.1394 }
+  ]}
+};
+/* Genera un número estable 15–90 a partir de un texto, para que cada
+   ciudad o barrio arranque con una alarma "de demostración" distinta
+   pero siempre igual, sin tener que escribirla a mano. */
+function hashSeed(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; }
+function seedAlarm(id) { return 15 + (hashSeed(id) % 76); }
+function allCities() { return Object.values(COUNTRIES).flatMap(c => c.cities); }
+function curCountry() { return COUNTRIES[store.d.country] || COUNTRIES.PY; }
+function allPlaces() {
+  const custom = (store.d.custom || []).filter(p => (p.country || 'PY') === (store.d.country || 'PY'));
+  return curCountry().cities.concat(custom);
+}
+function findPlace(id) { return allPlaces().find(p => p.id === id) || curCountry().cities[0]; }
+
+/* ---------------------- RANGOS MILITARES (por criaderos destruidos) ---------------------- */
+const RANKS = [
+  { min:0,     name:'Civil' },
+  { min:1,     name:'Recluta' },
+  { min:10,    name:'Soldado' },
+  { min:30,    name:'Cabo' },
+  { min:100,   name:'Sargento' },
+  { min:200,   name:'Sargento Segundo' },
+  { min:300,   name:'Sargento Primero' },
+  { min:400,   name:'Subteniente' },
+  { min:600,   name:'Teniente' },
+  { min:800,   name:'Capitán' },
+  { min:1000,  name:'Mayor' },
+  { min:1500,  name:'Teniente Coronel' },
+  { min:2000,  name:'Coronel' },
+  { min:3000,  name:'General de Brigada' },
+  { min:5000,  name:'General de División' },
+  { min:10000, name:'Teniente General' }
+];
+function rankFor(criaderos) { let r = RANKS[0]; for (const x of RANKS) { if (criaderos >= x.min) r = x; else break; } return r; }
+function nextRank(criaderos) { return RANKS.find(x => x.min > criaderos) || null; }
+
+/* ---------------------- COMPARTIR / RECLUTAMIENTO POR WHATSAPP ----------------------
+   Sin backend propio no podemos verificar en el celular del amigo si aceptó y jugó
+   (localStorage vive solo en cada dispositivo). Por ahora contamos "invitaciones
+   enviadas" desde este teléfono y dejamos el código de referido guardado en la URL,
+   listo para engancharse a un ranking internacional real el día que sumemos un
+   servidor simple (ver nota aparte). */
+function referralCode() {
+  if (!store.d.refCode) { store.d.refCode = Math.random().toString(36).slice(2, 8).toUpperCase(); store.save(); }
+  return store.d.refCode;
+}
+function captureReferral() {
+  const ref = new URLSearchParams(location.search).get('ref');
+  if (ref && !store.d.referredBy && ref !== store.d.refCode) { store.d.referredBy = ref; store.save(); }
+}
+function shareGeneric(text) {
+  if (navigator.share) { navigator.share({ title:'Operación Aedes AR', text, url:location.href }).catch(() => {}); return; }
+  if (navigator.clipboard) navigator.clipboard.writeText(text + ' ' + location.href).then(() => toast('Copiado al portapapeles', 1500)).catch(() => {});
+}
+function shareWhatsApp(text) { window.open('https://wa.me/?text=' + encodeURIComponent(text + ' ' + location.href), '_blank'); }
+function recruitMessage() {
+  const who = store.d.player ? store.d.player.name : 'Un soldado de la Resistencia';
+  return `¡Alerta invasión de Mosquitos! Te necesitamos para eliminar criaderos y mosquitos en tu barrio antes de que sea tarde. ${who} ya se sumó a la Resistencia: entrá, elegí tu ciudad y destruí criaderos reales con la cámara de tu celular:`;
+}
+function inviteViaWhatsApp() {
+  referralCode(); store.d.invitesSent = (store.d.invitesSent || 0) + 1; store.save();
+  shareWhatsApp(recruitMessage() + ` (código ${store.d.refCode})`);
+  updateRecruitInfo();
+}
+const RECRUIT_RANKS = [
+  { min:0,   name:'Sin reclutas' },
+  { min:3,   name:'Reclutador Básico' },
+  { min:10,  name:'Reclutador de Campo' },
+  { min:25,  name:'Reclutador Experto' },
+  { min:50,  name:'Comandante de Reclutamiento' },
+  { min:100, name:'Leyenda del Reclutamiento' }
+];
+function recruitRankFor(n) { let r = RECRUIT_RANKS[0]; for (const x of RECRUIT_RANKS) { if (n >= x.min) r = x; else break; } return r; }
+function updateRecruitInfo() {
+  referralCode();
+  $('recruitCode').textContent = store.d.refCode;
+  $('recruitCount').textContent = store.d.invitesSent || 0;
+  $('recruitRank').textContent = recruitRankFor(store.d.invitesSent || 0).name;
+}
+function checkPromotion() {
+  const cur = rankFor(store.d.criaderos);
+  if (cur.min > (store.d.lastRankMin || 0) && cur.min > 0) {
+    store.d.lastRankMin = cur.min; store.save();
+    $('promoCount').textContent = store.d.criaderos;
+    $('promoRank').textContent = cur.name;
+    showScreen('promo');
+    return true;
+  }
+  return false;
+}
+
+const TIPS = [
+  { icon:'🥚', title:'Huevos que resisten meses', text:'El Aedes aegypti pega sus huevos en la pared interna de cualquier recipiente con agua limpia y quieta, aunque sea una tapita. Aguantan meses secos: si vaciás un recipiente, cepillá bien las paredes para sacarlos, no alcanza con tirar el agua.' },
+  { icon:'🐛', title:'De huevo a mosquito en una semana', text:'En agua estancada, el huevo pasa a larva y después a pupa en solo 7 a 10 días. Cortar ese ciclo una vez por semana, vaciando y cepillando recipientes, es más efectivo que fumigar después.' },
+  { icon:'🪣', title:'Los criaderos más comunes', text:'Neumáticos viejos, baldes, botellas, portamacetas, canaletas tapadas y tanques destapados juntan agua de lluvia sin que nos demos cuenta. Recorré tu patio una vez por semana buscando estos "criaderos silenciosos".' },
+  { icon:'🧹', title:'Vaciar, cepillar y tapar', text:'La rutina que corta el ciclo: vaciá el agua, cepillá las paredes del recipiente para sacar los huevos pegados, y tapá bien lo que pueda juntar agua de nuevo.' },
+  { icon:'🛞', title:'Neumáticos: destino correcto', text:'Una llanta vieja tirada en el patio es uno de los criaderos preferidos del Aedes. Guardala bajo techo o llevala a un punto municipal de recolección de neumáticos.' },
+  { icon:'🌱', title:'Plantas y mascotas', text:'Los platitos bajo las macetas y los bebederos de mascotas también acumulan agua limpia. Cambiá esa agua al menos una vez por semana, no hace falta esperar a que se vea sucia.' },
+  { icon:'🕐', title:'¿Cuándo pica el Aedes?', text:'A diferencia de otros mosquitos, el Aedes aegypti pica sobre todo de día, con picos de actividad a la mañana temprano y al atardecer. Usá repelente en esos horarios.' },
+  { icon:'🦟', title:'Vuela poco, pero se multiplica rápido', text:'Un mosquito Aedes rara vez vuela más de 100-400 metros en toda su vida. Si hay un brote en tu barrio, el criadero está muy cerca: en tu casa o la de un vecino.' },
+  { icon:'🌡️', title:'Señales de alerta', text:'Fiebre alta repentina, dolor de cabeza fuerte, dolor detrás de los ojos y dolores musculares pueden ser síntomas de dengue. Consultá al servicio de salud y no te automediques.' },
+  { icon:'🤝', title:'Esto se gana en equipo', text:'Un solo patio limpio no alcanza si el vecino tiene un criadero activo. Avisale, compartí lo que aprendiste acá y sumen juntos la limpieza semanal del barrio.' }
+];
+
+/* ---------------------- UTILIDADES ---------------------- */
+const $ = id => document.getElementById(id);
+const TAU = Math.PI * 2;
+const FONT = "'Bungee','Arial Black',Impact,sans-serif";
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const normAngle = a => { a = ((a % 360) + 360) % 360; return a > 180 ? a - 360 : a; };
+const angDiff = (a, b) => normAngle(a - b);
+const vibrate = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+const keys = {};
+
+/* ---------------------- GUARDADO LOCAL (0 costo) ---------------------- */
+const store = {
+  d: { best:0, kills:0, criaderos:0, sound:true, seen:false, country:'PY', barrio:'asuncion', last:Date.now(), alarm:{}, custom:[], player:null, tipIndex:0, refCode:null, referredBy:null, invitesSent:0, lastRankMin:0 },
+  load() {
+    try { const raw = localStorage.getItem('aedesar.v1'); if (raw) Object.assign(this.d, JSON.parse(raw)); } catch (e) {}
+    if (!this.d.alarm || typeof this.d.alarm !== 'object') this.d.alarm = {};
+    if (!Array.isArray(this.d.custom)) this.d.custom = [];
+    if (!COUNTRIES[this.d.country]) this.d.country = 'PY';
+    const days = Math.max(0, (Date.now() - (this.d.last || Date.now())) / 864e5);
+    allCities().concat(this.d.custom).forEach(b => {      // los mosquitos vuelven con el tiempo, en todos los países
+      let a = this.d.alarm[b.id];
+      a = typeof a === 'number' ? Math.min(100, a + days * 4) : seedAlarm(b.id);
+      this.d.alarm[b.id] = Math.round(a);
+    });
+    this.d.last = Date.now();
+    this.save();
+  },
+  save() { try { localStorage.setItem('aedesar.v1', JSON.stringify(this.d)); } catch (e) {} }
+};
+function alarmInfo(a) {
+  return a >= 67 ? { label:'alta', color:'#e0312b' } : a >= 34 ? { label:'media', color:'#f59e0b' } : { label:'baja', color:'#22c55e' };
+}
+
+/* ---------------------- SONIDO (todo sintetizado, sin archivos) ---------------------- */
+const Sound = {
+  ac:null, master:null, buzz:null, noiseBuf:null, on:true,
+  init() {
+    if (this.ac) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ac = new AC();
+    this.master = this.ac.createGain();
+    this.master.gain.value = this.on ? 0.8 : 0;
+    this.master.connect(this.ac.destination);
+    const len = this.ac.sampleRate * 0.5, buf = this.ac.createBuffer(1, len, this.ac.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = Math.random() * 2 - 1;
+    this.noiseBuf = buf;
+    // zumbido continuo del mosquito más cercano
+    const osc = this.ac.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 380;
+    const lfo = this.ac.createOscillator(); lfo.frequency.value = 32;
+    const lfoG = this.ac.createGain(); lfoG.gain.value = 40;
+    lfo.connect(lfoG); lfoG.connect(osc.frequency);
+    const lp = this.ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+    const g = this.ac.createGain(); g.gain.value = 0;
+    osc.connect(lp); lp.connect(g); g.connect(this.master);
+    osc.start(); lfo.start();
+    this.buzz = g;
+  },
+  resume() { if (this.ac && this.ac.state === 'suspended') this.ac.resume(); },
+  setOn(v) { this.on = v; if (this.master) this.master.gain.value = v ? 0.8 : 0; },
+  tone(f, d, type = 'square', vol = .15, to = null, delay = 0) {
+    if (!this.ac || !this.on) return;
+    const t = this.ac.currentTime + delay, o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + d + .02);
+  },
+  noise(d = .1, vol = .2, delay = 0) {
+    if (!this.ac || !this.on) return;
+    const t = this.ac.currentTime + delay, s = this.ac.createBufferSource(), g = this.ac.createGain();
+    s.buffer = this.noiseBuf; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    s.connect(g); g.connect(this.master); s.start(t); s.stop(t + d + .02);
+  },
+  setBuzz(v) { if (this.buzz && this.ac) this.buzz.gain.setTargetAtTime(this.on ? v * 0.05 : 0, this.ac.currentTime, 0.1); },
+  zap()     { this.noise(.08, .14); this.tone(900, .12, 'square', .07, 200); },
+  kill()    { this.tone(520, .08, 'square', .12, 1040); this.tone(780, .1, 'triangle', .1, 1560, .06); },
+  miss()    { this.tone(180, .12, 'sawtooth', .05, 90); },
+  hitBase() { this.tone(110, .18, 'sawtooth', .2, 55); this.noise(.12, .18); },
+  bite()    { this.tone(300, .3, 'sawtooth', .2, 80); },
+  expose()  { [0, .12, .24].forEach(d => this.tone(700, .1, 'square', .1, 900, d)); },
+  siren(reps = 3) {                          // alarma real de dos tonos (alarma del barrio "alta")
+    for (let i = 0; i < reps; i++) {
+      this.tone(740, .28, 'sawtooth', .1, 940, i * .56);
+      this.tone(940, .28, 'sawtooth', .1, 740, i * .56 + .28);
+    }
+  },
+  reload()  { this.tone(300, .05, 'square', .07); this.tone(450, .05, 'square', .07, null, .08); },
+  win()     { [523, 659, 784, 1046].forEach((f, i) => this.tone(f, .18, 'triangle', .15, null, i * .11)); },
+  lose()    { [400, 300, 220, 150].forEach((f, i) => this.tone(f, .25, 'sawtooth', .12, null, i * .18)); },
+  sponsor() { this.noise(.4, .25); this.tone(200, .5, 'sawtooth', .14, 1200); }
+};
+
+/* ---------------------- CANVAS ---------------------- */
+const canvas = $('game'), ctx = canvas.getContext('2d');
+const radar = $('radar'), rctx = radar.getContext('2d');
+const video = $('cam');
+let W = 0, H = 0, U = 1, DPR = 1;
+function resize() {
+  const app = $('app');
+  W = app.clientWidth; H = app.clientHeight;
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  radar.width = Math.round(96 * DPR); radar.height = Math.round(96 * DPR);
+  U = clamp(Math.min(W / 390, H / 780), .8, 1.6);     // escala de todo lo que se dibuja
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+resize();
+
+/* ---------------------- ESTADO ---------------------- */
+let state = 'MENU';          // MENU, MAP, PLAYING, PAUSED, END
+let time = 0;                // reloj de animación
+let run = null, base = null, mosq = [], parts = [];
+let ammo = 0, reload = 0, charge = 0, spawnT = 0, shake = 0;
+let sponsorKills = 0, sponsorNeed = 12, sponsorReady = false;
+let camOn = false, gyroListening = false, envReady = false, launching = false;
+let barrioId = 'sajonia';
+
+/* ---------------------- CÁMARA VIRTUAL (giroscopio) ----------------------
+   Los mosquitos viven en el "mundo": tienen un rumbo (yaw) y una elevación (pitch).
+   El giroscopio nos dice hacia dónde apunta la cámara y proyectamos todo a pantalla. */
+const Cam = {
+  yaw:0, pitch:0, tYaw:0, tPitch:0, gyro:false, yawOffset:0, rawYaw:0,
+  onOrient(e) {
+    if (e.alpha == null || e.beta == null || e.gamma == null) return;
+    const d = Math.PI / 180, a = e.alpha * d, b = e.beta * d, g = e.gamma * d;
+    const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b), cg = Math.cos(g), sg = Math.sin(g);
+    // hacia dónde mira la cámara trasera (eje -Z del teléfono) en coordenadas del mundo
+    const x = -ca * sg - sa * sb * cg;
+    const y = -sa * sg + ca * sb * cg;
+    const z = -cb * cg;
+    const yaw = Math.atan2(x, y) / d;
+    this.rawYaw = yaw;
+    if (!this.gyro) { this.gyro = true; this.yawOffset = yaw; }
+    this.tYaw = normAngle(yaw - this.yawOffset);
+    this.tPitch = Math.asin(clamp(z, -1, 1)) / d;
+  },
+  recenter() {
+    if (this.gyro) this.yawOffset = this.rawYaw;
+    this.tYaw = 0; this.yaw = 0;
+    if (!this.gyro) { this.tPitch = 0; this.pitch = 0; }
+  },
+  update(dt) {
+    if (!this.gyro) {          // teclado / arrastre cuando no hay sensores
+      const kx = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
+      const ky = (keys.ArrowUp || keys.KeyW ? 1 : 0) - (keys.ArrowDown || keys.KeyS ? 1 : 0);
+      this.tYaw = normAngle(this.tYaw + kx * 70 * dt);
+      this.tPitch = clamp(this.tPitch + ky * 50 * dt, -60, 60);
+    }
+    const k = 1 - Math.exp(-dt * 16);      // suavizado
+    this.yaw = normAngle(this.yaw + angDiff(this.tYaw, this.yaw) * k);
+    this.pitch += (this.tPitch - this.pitch) * k;
+  }
+};
+function project(yaw, pitch) {
+  const ppd = H / CFG.vfov;                // píxeles por grado
+  return { x: W / 2 + angDiff(yaw, Cam.yaw) * ppd, y: H / 2 - (pitch - Cam.pitch) * ppd };
+}
+
+async function enableGyro() {
+  if (gyroListening) return true;
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const r = await DeviceOrientationEvent.requestPermission();   // iOS 13+: tiene que salir de un toque
+      if (r !== 'granted') return false;
+    }
+    window.addEventListener('deviceorientation', e => Cam.onOrient(e), true);
+    gyroListening = true;
+    return true;
+  } catch (e) { return false; }
+}
+let camError = null;
+async function enableCamera() {
+  if (camOn) return true;
+  camError = null;
+  if (!window.isSecureContext) {
+    camError = 'El navegador bloquea la cámara: abrí el juego con HTTPS o desde localhost.';
+    return false;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    camError = 'Este navegador no permite acceder a la cámara.';
+    return false;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false
+    });
+    video.srcObject = stream;
+    try { await video.play(); } catch (e) {}
+    video.classList.add('on');
+    camOn = true;
+    return true;
+  } catch (e) {
+    camError = e && e.name === 'NotAllowedError' ? 'Le negaste el permiso a la cámara. Habilitalo en los ajustes del sitio y tocá 📷.'
+      : e && e.name === 'NotFoundError' ? 'No se encontró ninguna cámara en este dispositivo.'
+      : e && e.name === 'NotReadableError' ? 'Otra app está usando la cámara ahora mismo.'
+      : 'No se pudo activar la cámara (' + (e && e.name || 'error') + ').';
+    return false;
+  }
+}
+async function retryCamera() {
+  if (camOn) { toast('La cámara ya está activa', 1400); return; }
+  toast('Activando cámara…', 1200);
+  const ok = await enableCamera();
+  toast(ok ? '📷 Cámara activada' : (camError || 'No se pudo activar la cámara'), 2800);
+}
+
+/* ---------------------- FONDO DE PRÁCTICA (si no hay cámara) ---------------------- */
+const LANDMARKS = (() => {
+  let s = 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const arr = [], kinds = ['tree', 'tree', 'house', 'pole', 'house', 'tree'];
+  for (let i = 0; i < 46; i++) arr.push({ yaw: normAngle(i * (360 / 46) + r() * 4), kind: kinds[Math.floor(r() * 6)], h: 44 + r() * 70, off: r() * 50, hue: Math.floor(r() * 360) });
+  return arr.sort((a, b) => a.off - b.off);
+})();
+function drawFallbackBG() {
+  const ppd = H / CFG.vfov, hy = H / 2 + Cam.pitch * ppd;
+  const sky = ctx.createLinearGradient(0, 0, 0, Math.max(hy, 1));
+  sky.addColorStop(0, '#3d8fe0'); sky.addColorStop(1, '#cfeaff');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  const sun = project(35, 38);
+  const sg = ctx.createRadialGradient(sun.x, sun.y, 4, sun.x, sun.y, 70 * U);
+  sg.addColorStop(0, 'rgba(255,250,200,1)'); sg.addColorStop(1, 'rgba(255,250,200,0)');
+  ctx.fillStyle = sg; ctx.fillRect(sun.x - 80 * U, sun.y - 80 * U, 160 * U, 160 * U);
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  [[-70, 26], [-10, 34], [60, 22], [120, 30], [-140, 28], [175, 36]].forEach(([yw, el]) => {
+    const p = project(yw, el);
+    if (p.x < -120 || p.x > W + 120) return;
+    [[0, 0, 34], [26, 6, 26], [-26, 6, 24]].forEach(([ox, oy, rr]) => { ctx.beginPath(); ctx.ellipse(p.x + ox * U, p.y + oy * U, rr * U, rr * .55 * U, 0, 0, TAU); ctx.fill(); });
+  });
+  const gr = ctx.createLinearGradient(0, hy, 0, hy + ppd * 40);
+  gr.addColorStop(0, '#a9875a'); gr.addColorStop(1, '#7b5a35');
+  ctx.fillStyle = gr; ctx.fillRect(0, hy, W, H - hy + 1);
+  LANDMARKS.forEach(lm => {
+    const x = W / 2 + angDiff(lm.yaw, Cam.yaw) * ppd;
+    if (x < -120 || x > W + 120) return;
+    const y0 = hy + lm.off * U * .6, h = lm.h * U;
+    if (lm.kind === 'tree') {
+      ctx.fillStyle = '#5b3d22'; ctx.fillRect(x - 4 * U, y0 - h * .45, 8 * U, h * .45);
+      ctx.fillStyle = '#2f8a3a';
+      [[0, -.62, .3], [-.18, -.5, .22], [.18, -.5, .22]].forEach(([ox, oy, rr]) => { ctx.beginPath(); ctx.arc(x + ox * h, y0 + oy * h, rr * h, 0, TAU); ctx.fill(); });
+    } else if (lm.kind === 'house') {
+      const w = h * 1.1;
+      ctx.fillStyle = `hsl(${lm.hue},35%,74%)`; ctx.fillRect(x - w / 2, y0 - h * .7, w, h * .7);
+      ctx.fillStyle = '#b5523b'; ctx.beginPath(); ctx.moveTo(x - w * .58, y0 - h * .7); ctx.lineTo(x, y0 - h * 1.05); ctx.lineTo(x + w * .58, y0 - h * .7); ctx.fill();
+      ctx.fillStyle = '#5a4030'; ctx.fillRect(x - w * .09, y0 - h * .35, w * .18, h * .35);
+    } else {
+      ctx.strokeStyle = '#3b2d22'; ctx.lineWidth = 3 * U;
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 - h * 1.1); ctx.moveTo(x - 14 * U, y0 - h); ctx.lineTo(x + 14 * U, y0 - h); ctx.stroke();
+    }
+  });
+  const ry = hy + ppd * 7;                       // calle
+  ctx.fillStyle = '#4b4f57'; ctx.fillRect(0, ry, W, ppd * 9);
+  ctx.fillStyle = '#e8e2c8';
+  const off = (-Cam.yaw * ppd) % (70 * U);
+  for (let x = off - 70 * U; x < W + 70 * U; x += 70 * U) ctx.fillRect(x, ry + ppd * 4.2, 34 * U, 3 * U);
+}
+
+/* ---------------------- CRIADERO ---------------------- */
+function makeBase() {
+  const type = (run.level - 1) % 3;
+  const maxHp = 60 + 30 * run.level;
+  return { yaw: (Math.random() < .5 ? -1 : 1) * rand(70, 140), pitch: -15, r: 62, type,
+    name: BASE_NAMES[type], hp: maxHp, maxHp, exposed: false, timer: 0, hitFlash: 0 };
+}
+function drawTire(x, y, r) {
+  const ry = r * .42, th = r * .3;
+  ctx.fillStyle = '#0d1119'; ctx.beginPath(); ctx.ellipse(x, y + th, r, ry, 0, 0, TAU); ctx.fill();
+  ctx.fillRect(x - r, y, r * 2, th);
+  ctx.strokeStyle = '#1c2331'; ctx.lineWidth = 2 * U;
+  for (let i = -3; i <= 3; i++) {
+    const k = i * .29, yy = ry * Math.sqrt(Math.max(0, 1 - k * k));
+    ctx.beginPath(); ctx.moveTo(x + k * r, y + yy); ctx.lineTo(x + k * r, y + th + yy); ctx.stroke();
+  }
+  const g = ctx.createRadialGradient(x - r * .25, y - ry * .5, r * .1, x, y, r);
+  g.addColorStop(0, '#465268'); g.addColorStop(1, '#151b28');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, r, ry, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#0a0d14'; ctx.lineWidth = 3 * U; ctx.stroke();
+  ctx.fillStyle = '#070a10'; ctx.beginPath(); ctx.ellipse(x, y, r * .56, ry * .56, 0, 0, TAU); ctx.fill();
+  const w = ctx.createLinearGradient(x, y - ry * .5, x, y + ry * .5);
+  w.addColorStop(0, '#5fb7f0'); w.addColorStop(1, '#2b7fc4');
+  ctx.fillStyle = w; ctx.beginPath(); ctx.ellipse(x, y + ry * .06, r * .48, ry * .46, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(x - r * .15, y - ry * .12, r * .12, ry * .1, -.3, 0, TAU); ctx.fill();
+}
+function drawBucket(x, y, r) {
+  const w = r * 1.5, h = r * 1.1, ry = w * .2, top = y - h * .35;
+  ctx.strokeStyle = '#cfd6df'; ctx.lineWidth = 3 * U;
+  ctx.beginPath(); ctx.ellipse(x, top, w * .55, h * .6, 0, Math.PI, TAU); ctx.stroke();
+  ctx.fillStyle = '#e8672b'; ctx.beginPath();
+  ctx.moveTo(x - w / 2, top); ctx.lineTo(x - w * .38, y + h * .55);
+  ctx.quadraticCurveTo(x, y + h * .55 + ry * 1.3, x + w * .38, y + h * .55); ctx.lineTo(x + w / 2, top); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.fillRect(x - w * .44, y + h * .05, w * .88, h * .12);
+  ctx.fillStyle = '#b94a18'; ctx.beginPath(); ctx.ellipse(x, top, w / 2, ry, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#4fa9e8'; ctx.beginPath(); ctx.ellipse(x, top, w / 2 - 5 * U, ry - 3 * U, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.ellipse(x - w * .12, top - 1 * U, w * .1, ry * .3, -.2, 0, TAU); ctx.fill();
+}
+function can(x, y, w, h, c, rot, bottle) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+  ctx.fillStyle = c; ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.beginPath(); ctx.ellipse(0, h / 2, w / 2, w * .18, 0, 0, TAU); ctx.fill();
+  if (bottle) ctx.fillRect(-w * .16, -h / 2 - h * .32, w * .32, h * .34);
+  ctx.beginPath(); ctx.ellipse(0, -h / 2, w / 2, w * .18, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.32)'; ctx.beginPath(); ctx.ellipse(0, -h / 2, w / 2, w * .18, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fillRect(-w / 2, -h * .12, w, h * .24);
+  ctx.restore();
+}
+function drawCans(x, y, r) {
+  const items = [[-.55, .12, '#c9d1d9', -.35, 0], [-.05, .2, '#e0b100', .2, 0], [.42, .1, '#c9d1d9', .5, 0], [-.3, -.22, '#2ea86b', -.15, 1], [.18, -.26, '#d94f4f', .3, 0]];
+  items.forEach(([ox, oy, c, rot, b]) => can(x + ox * r, y + oy * r, r * .34, r * .55, c, rot, b));
+}
+function drawShield(x, y, r) {
+  const cy = y - r * .1, R = r * 1.4, g = ctx.createRadialGradient(x, cy, R * .2, x, cy, R);
+  g.addColorStop(0, 'rgba(120,200,255,.04)'); g.addColorStop(1, 'rgba(120,200,255,.32)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, cy, R, R * .8, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = `rgba(170,225,255,${.6 + .25 * Math.sin(time * 3)})`; ctx.lineWidth = 3 * U;
+  ctx.setLineDash([14 * U, 8 * U]); ctx.lineDashOffset = -time * 30; ctx.stroke(); ctx.setLineDash([]);
+  ctx.font = `${22 * U}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+  ctx.fillText('🔒', x, cy - R * .8 - 14 * U);
+}
+function outlineText(str, x, y, size, fill, stroke) {
+  ctx.font = `${size}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round'; ctx.lineWidth = size * .22; ctx.strokeStyle = stroke; ctx.strokeText(str, x, y);
+  ctx.fillStyle = fill; ctx.fillText(str, x, y);
+}
+function drawTarget(x, y, r) {
+  ctx.save(); ctx.translate(x, y - r * .05); ctx.rotate(time * 1.2);
+  ctx.strokeStyle = '#ff3b30'; ctx.lineWidth = 4 * U; ctx.setLineDash([18 * U, 10 * U]);
+  ctx.beginPath(); ctx.arc(0, 0, r * 1.25, 0, TAU); ctx.stroke(); ctx.restore();
+  const by = y - r * 1.35, bob = Math.sin(time * 8) * 5 * U;
+  ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 5 * U; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let i = 0; i < 3; i++) {
+    const yy = by - 36 * U + i * 11 * U + bob;
+    ctx.globalAlpha = .4 + .3 * i;
+    ctx.beginPath(); ctx.moveTo(x - 14 * U, yy); ctx.lineTo(x, yy + 9 * U); ctx.lineTo(x + 14 * U, yy); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  outlineText('¡ZAP!', x, by - 54 * U, 24 * U, '#ffd23f', '#7a0d0a');
+}
+function drawBase() {
+  const p = project(base.yaw, base.pitch);
+  if (p.x < -220 * U || p.x > W + 220 * U) return;
+  const x = p.x, y = p.y, r = base.r * U;
+  ctx.save();
+  const pg = ctx.createRadialGradient(x, y + r * .35, r * .1, x, y + r * .35, r * 1.8);
+  pg.addColorStop(0, 'rgba(90,180,240,.75)'); pg.addColorStop(1, 'rgba(90,180,240,0)');
+  ctx.fillStyle = pg; ctx.beginPath(); ctx.ellipse(x, y + r * .35, r * 1.8, r * .55, 0, 0, TAU); ctx.fill();
+  const rp = (time * .5) % 1;
+  ctx.strokeStyle = `rgba(255,255,255,${.5 * (1 - rp)})`; ctx.lineWidth = 2 * U;
+  ctx.beginPath(); ctx.ellipse(x, y + r * .35, r * (.5 + rp * 1.2), r * (.15 + rp * .35), 0, 0, TAU); ctx.stroke();
+  if (base.exposed) { ctx.shadowColor = '#ff3b30'; ctx.shadowBlur = (28 + 10 * Math.sin(time * 10)) * U; }
+  if (base.type === 0) drawTire(x, y, r); else if (base.type === 1) drawBucket(x, y, r); else drawCans(x, y, r);
+  ctx.shadowBlur = 0;
+  if (base.hitFlash > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${clamp(base.hitFlash * 4, 0, .8)})`;
+    ctx.beginPath(); ctx.ellipse(x, y, r * 1.05, r * .6, 0, 0, TAU); ctx.fill();
+  }
+  if (!base.exposed) drawShield(x, y, r); else drawTarget(x, y, r);
+  ctx.restore();
+}
+
+/* ---------------------- MOSQUITOS ---------------------- */
+const mScale = m => TYPES[m.type].scale * (.55 + (1 - m.dist) * 1.25);
+const mosqReach = m => (17 * mScale(m) + CFG.hitAssist) * U;
+const maxAlive = () => Math.min(12, 3 + run.level);
+const getAlarm = () => store.d.alarm[barrioId] == null ? 50 : store.d.alarm[barrioId];
+const spawnInterval = () => Math.max(.7, 2 - .14 * (run.level - 1) - getAlarm() / 100 * .4);
+
+function spawnMosquito() {
+  const L = run.level, r = Math.random();
+  let type = 'comun';
+  if (L >= 6 && r < .07) type = 'general';
+  else if (L >= 3 && r < .27) type = 'tigre';
+  else if (L >= 2 && r < .52) type = 'veloz';
+  const T = TYPES[type];
+  mosq.push({ type, hp: T.hp, yaw: normAngle(base.yaw + rand(-8, 8)), pitch: base.pitch + rand(2, 10), dist: 1,
+    vyaw: rand(-8, 8), vpitch: rand(0, 10), wing: rand(0, 6), hitFlash: 0,
+    speed: (.055 + .007 * (L - 1) + getAlarm() * .0002) * T.spd });
+}
+function drawMosquito(m, x, y) {
+  const T = TYPES[m.type], s = mScale(m) * U;
+  const frames = SPRITES[T.sprite] || SPRITES.soldado;
+  const img = Math.sin(m.wing) >= 0 ? frames[0] : frames[1];
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  ctx.rotate(clamp(m.vyaw * .012, -.35, .35));
+  if (m.dist < .3) {
+    ctx.beginPath(); ctx.arc(0, 2, 34, 0, TAU);
+    ctx.strokeStyle = `rgba(255,60,60,${.5 + .5 * Math.sin(time * 14)})`; ctx.lineWidth = 4; ctx.stroke();
+  }
+  ctx.globalAlpha = .78 + .22 * (1 - m.dist);
+  ctx.filter = m.hitFlash > 0 ? `${T.filter} brightness(2.2) saturate(.3)` : T.filter;
+  if (img && img.complete && img.naturalWidth) {
+    const bw = SPRITE_W[T.sprite] || 46, bh = bw * (img.naturalHeight / img.naturalWidth);
+    ctx.drawImage(img, -bw / 2, -bh * .46, bw, bh);
+  } else {                                   // mientras el sprite carga, placeholder simple
+    ctx.filter = 'none'; ctx.fillStyle = '#2f4d22'; ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.fill();
+  }
+  ctx.filter = 'none'; ctx.globalAlpha = 1;
+  if (T.hp > 1) for (let i = 0; i < T.hp; i++) { ctx.fillStyle = i < m.hp ? '#ff3b30' : '#3a3a3a'; ctx.beginPath(); ctx.arc((i - (T.hp - 1) / 2) * 8, -34, 3, 0, TAU); ctx.fill(); }
+  ctx.restore();
+}
+
+/* ---------------------- PARTÍCULAS Y EFECTOS ---------------------- */
+function pfx(x, y, n, colors, spd = 220, life = .5, size = 5) {
+  for (let i = 0; i < n; i++) {
+    const a = rand(0, TAU), v = rand(.3, 1) * spd * U;
+    parts.push({ t:'dot', x, y, vx:Math.cos(a) * v, vy:Math.sin(a) * v, l:life * rand(.7, 1.2), m:life, s:size * rand(.6, 1.3) * U, c:colors[i % colors.length] });
+  }
+}
+function ring(x, y, c, r0, r1, life = .35) { parts.push({ t:'ring', x, y, c, r0, r1, l:life, m:life }); }
+function floaty(x, y, text, c) { parts.push({ t:'txt', x, y, text, c, l:.9, m:.9 }); }
+function burst(x, y, text) { parts.push({ t:'burst', x, y, text, rot:rand(-.3, .3), l:.5, m:.5 }); }
+function starburst(x, y, r, spikes, rot) {
+  ctx.beginPath();
+  for (let i = 0; i < spikes * 2; i++) { const a = rot + i * Math.PI / spikes, rr = i % 2 ? r * .62 : r; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  ctx.closePath();
+}
+function updateFx(dt) {
+  shake = Math.max(0, shake - dt * 40);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]; p.l -= dt;
+    if (p.l <= 0) { parts.splice(i, 1); continue; }
+    if (p.t === 'dot') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 500 * U * dt; }
+    else if (p.t === 'txt') p.y -= 40 * U * dt;
+  }
+}
+function drawParts() {
+  for (const p of parts) {
+    const k = p.l / p.m;
+    ctx.globalAlpha = clamp(k * 1.6, 0, 1);
+    if (p.t === 'dot') { ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(.5, p.s * (.4 + k * .6)), 0, TAU); ctx.fill(); }
+    else if (p.t === 'ring') { ctx.strokeStyle = p.c; ctx.lineWidth = 4 * U; ctx.beginPath(); ctx.arc(p.x, p.y, p.r0 + (p.r1 - p.r0) * (1 - k), 0, TAU); ctx.stroke(); }
+    else if (p.t === 'txt') outlineText(p.text, p.x, p.y, 20 * U, p.c, '#0d180a');
+    else if (p.t === 'burst') {
+      const sc = .7 + (1 - k) * .5;
+      ctx.fillStyle = '#ffd23f'; ctx.strokeStyle = '#e0312b'; ctx.lineWidth = 4 * U;
+      starburst(p.x, p.y, 54 * U * sc, 9, p.rot + (1 - k)); ctx.fill(); ctx.stroke();
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.globalAlpha = clamp(k * 1.6, 0, 1); ctx.translate(-p.x, -p.y);
+      outlineText(p.text, p.x, p.y, 20 * U * sc, '#fff', '#c01f1a'); ctx.restore();
+    }
+    else if (p.t === 'wave') { ctx.strokeStyle = p.c; ctx.lineWidth = 30 * U * k; ctx.beginPath(); ctx.arc(p.x, p.y, (1 - k) * Math.max(W, H) * 1.1, 0, TAU); ctx.stroke(); }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ---------------------- INDICADORES, MIRA Y RADAR ---------------------- */
+function edgeArrow(x, y, col, isBase) {
+  const cx = W / 2, cy = H / 2, dx = x - cx, dy = y - cy;
+  const mx = W / 2 - 46 * U, my = H / 2 - 150 * U;
+  const k = Math.min(mx / Math.max(Math.abs(dx), 1e-3), my / Math.max(Math.abs(dy), 1e-3), 1);
+  const ex = cx + dx * k, ey = cy + dy * k, ang = Math.atan2(dy, dx), pulse = 1 + .15 * Math.sin(time * 8);
+  const rr = (isBase ? 17 : 11) * U * pulse;
+  ctx.save(); ctx.translate(ex, ey);
+  ctx.fillStyle = 'rgba(6,14,36,.85)'; ctx.strokeStyle = col; ctx.lineWidth = 3 * U;
+  ctx.beginPath(); ctx.arc(0, 0, rr, 0, TAU); ctx.fill(); ctx.stroke();
+  if (isBase) { ctx.font = `${18 * U}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText('🎯', 0, 1); }
+  else { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, 4 * U, 0, TAU); ctx.fill(); }
+  ctx.rotate(ang); const r0 = rr + 5 * U;
+  ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(r0 + 10 * U, 0); ctx.lineTo(r0, -7 * U); ctx.lineTo(r0, 7 * U); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function drawIndicators() {
+  const p = project(base.yaw, base.pitch);
+  if (p.x < 20 || p.x > W - 20 || p.y < 90 * U || p.y > H - 150 * U) edgeArrow(p.x, p.y, base.exposed ? '#ff3b30' : '#4da3ff', true);
+  let n = 0;
+  mosq.slice().sort((a, b) => a.dist - b.dist).forEach(m => {
+    if (n >= 4 || m.dist > .65) return;
+    const q = project(m.yaw, m.pitch);
+    if (q.x < -10 || q.x > W + 10 || q.y < -10 || q.y > H + 10) { edgeArrow(q.x, q.y, '#ff5252', false); n++; }
+  });
+}
+function findTarget() {
+  const cx = W / 2, cy = H / 2; let best = null, bd = 1e9;
+  for (const m of mosq) {
+    const p = project(m.yaw, m.pitch), d = Math.hypot(p.x - cx, p.y - cy);
+    if (d < mosqReach(m) && d < bd) { bd = d; best = { kind:'m', m, p }; }
+  }
+  if (best) return best;
+  if (base.exposed) {
+    const p = project(base.yaw, base.pitch);
+    if (Math.hypot(p.x - cx, p.y - cy) < base.r * U * 1.05 + CFG.hitAssist * U * .4) return { kind:'b', p };
+  }
+  return null;
+}
+function drawCrosshair(locked) {
+  const r = 44 * U, col = reload > 0 ? '#ffd23f' : locked ? '#8dff4a' : '#ff2d55';
+  ctx.save(); ctx.translate(W / 2, H / 2);
+  ctx.strokeStyle = col; ctx.lineWidth = 3 * U; ctx.shadowColor = col; ctx.shadowBlur = 10;
+  if (locked) { ctx.rotate(time * 1.6); ctx.setLineDash([16 * U, 10 * U]); }
+  ctx.beginPath(); ctx.arc(0, 0, locked ? r * .86 : r, 0, TAU); ctx.stroke();
+  ctx.setLineDash([]); if (locked) ctx.rotate(-time * 1.6);
+  ctx.lineWidth = 2.5 * U; ctx.beginPath();
+  [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => { ctx.moveTo(dx * r * .55, dy * r * .55); ctx.lineTo(dx * (r + 12 * U), dy * (r + 12 * U)); });
+  ctx.stroke();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, 4 * U, 0, TAU); ctx.fill();
+  if (reload > 0) {
+    ctx.shadowBlur = 0; ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 5 * U;
+    ctx.beginPath(); ctx.arc(0, 0, r + 9 * U, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - reload / CFG.reloadSeconds)); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawRadar() {
+  const S = 96, c = S / 2, R = c - 4;
+  rctx.setTransform(DPR, 0, 0, DPR, 0, 0); rctx.clearRect(0, 0, S, S);
+  rctx.save(); rctx.beginPath(); rctx.arc(c, c, R + 2, 0, TAU); rctx.fillStyle = 'rgba(6,20,40,.8)'; rctx.fill(); rctx.clip();
+  rctx.strokeStyle = 'rgba(120,255,160,.35)'; rctx.lineWidth = 1;
+  [R, R * .66, R * .33].forEach(r => { rctx.beginPath(); rctx.arc(c, c, r, 0, TAU); rctx.stroke(); });
+  rctx.beginPath(); rctx.moveTo(c, c - R); rctx.lineTo(c, c + R); rctx.moveTo(c - R, c); rctx.lineTo(c + R, c); rctx.stroke();
+  const half = (W / H * CFG.vfov / 2) * Math.PI / 180;
+  rctx.fillStyle = 'rgba(120,255,160,.2)'; rctx.beginPath(); rctx.moveTo(c, c);
+  rctx.arc(c, c, R, -Math.PI / 2 - half, -Math.PI / 2 + half); rctx.closePath(); rctx.fill();
+  const sw = time * 2.2; rctx.strokeStyle = 'rgba(120,255,160,.5)';
+  rctx.beginPath(); rctx.moveTo(c, c); rctx.lineTo(c + Math.cos(sw) * R, c + Math.sin(sw) * R); rctx.stroke();
+  const a = angDiff(base.yaw, Cam.yaw) * Math.PI / 180, br = R * .8;
+  rctx.fillStyle = base.exposed ? '#ff3b30' : '#4da3ff';
+  rctx.fillRect(c + Math.sin(a) * br - 4, c - Math.cos(a) * br - 4, 8, 8);
+  mosq.forEach(m => {
+    const b = angDiff(m.yaw, Cam.yaw) * Math.PI / 180, rr = Math.max(4, m.dist * R);
+    rctx.fillStyle = m.dist < .3 ? '#ff3b30' : '#ffd23f';
+    rctx.beginPath(); rctx.arc(c + Math.sin(b) * rr, c - Math.cos(b) * rr, 3, 0, TAU); rctx.fill();
+  });
+  rctx.fillStyle = '#fff'; rctx.beginPath(); rctx.arc(c, c, 2.5, 0, TAU); rctx.fill();
+  rctx.restore();
+}
+
+/* ---------------------- INTERFAZ (DOM) ---------------------- */
+let toastT = 0;
+function toast(msg, ms = 1800) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
+}
+function flash(cls) { const f = $('flash'); f.className = ''; void f.offsetWidth; f.className = cls; }
+function showScreen(id) { document.querySelectorAll('.screen').forEach(s => { s.hidden = id ? s.id !== 'scr-' + id : true; }); }
+function uiScore()  { $('score').textContent = run.score.toLocaleString('es-PY'); }
+function uiLevel()  { $('lvl').textContent = `Nivel ${run.level}: ${LEVEL_TITLES[Math.min(run.level - 1, LEVEL_TITLES.length - 1)]}`; }
+function uiCharge() { $('chargeBar').style.width = (base.exposed ? 100 : charge / CFG.killsToExpose * 100) + '%'; }
+function uiBase()   { $('baseBar').style.width = (base.hp / base.maxHp * 100) + '%'; $('baseName').textContent = base.name; }
+function uiLives()  {
+  const box = $('lives'); box.innerHTML = '';
+  for (let i = 0; i < CFG.lives; i++) { const s = document.createElement('span'); s.className = 'heart' + (i < run.lives ? '' : ' off'); s.textContent = '♥'; box.appendChild(s); }
+}
+function uiAmmo() {
+  const box = $('ammo'); box.classList.toggle('reloading', reload > 0);
+  if (box.children.length !== CFG.ammoMax) { box.innerHTML = ''; for (let i = 0; i < CFG.ammoMax; i++) { const p = document.createElement('i'); p.className = 'pip'; box.appendChild(p); } }
+  [...box.children].forEach((p, i) => p.classList.toggle('on', i < ammo));
+}
+function uiSponsor() {
+  const p = clamp(sponsorKills / sponsorNeed, 0, 1);
+  $('spFill').style.height = ((1 - p) * 100) + '%';
+  const b = $('btnSponsor'); b.disabled = !sponsorReady; b.classList.toggle('ready', sponsorReady);
+}
+
+/* ---------------------- JUEGO ---------------------- */
+function newRun() {
+  run = { score:0, level:1, lives:CFG.lives, kills:0, shots:0, hits:0, bites:0, combo:1, lastKill:-99, t:0, sponsorUsed:0, win:false, record:false, bonus:0 };
+  sponsorKills = 0; sponsorNeed = 12; sponsorReady = false;
+  startLevel();
+}
+function startLevel() {
+  base = makeBase(); mosq = []; parts = []; ammo = CFG.ammoMax; reload = 0; charge = 0; spawnT = .8; shake = 0;
+  Cam.recenter();
+  state = 'PLAYING'; showScreen(null); $('hud').hidden = false; $('banner').hidden = true;
+  const b = findPlace(barrioId), info = alarmInfo(getAlarm());
+  $('barrioTag').textContent = `📍 ${b.name} · alarma ${info.label}`;
+  if (info.label === 'alta') Sound.siren(2);
+  $('spName').textContent = CFG.sponsor.name;
+  uiScore(); uiLevel(); uiLives(); uiAmmo(); uiBase(); uiCharge(); uiSponsor();
+  if (!store.d.seen && run.level === 1) {
+    store.d.seen = true; store.save();
+    toast('Girá el teléfono: hay mosquitos alrededor', 2600);
+    setTimeout(() => { if (state === 'PLAYING') toast('Apuntá con la mira y tocá ZAP!', 2600); }, 2800);
+  } else toast(`${base.name}: ¡encontralo!`, 2200);
+  setTimeout(() => { if (state === 'PLAYING' && !Cam.gyro) toast('Sin sensores: arrastrá el dedo para mirar', 2600); }, 1500);
+}
+function startReload() { if (reload > 0) return; reload = CFG.reloadSeconds; Sound.reload(); uiAmmo(); }
+
+function tryShoot() {
+  if (state !== 'PLAYING' || reload > 0) return;
+  if (ammo <= 0) { startReload(); return; }
+  ammo--; run.shots++; uiAmmo();
+  Sound.zap(); flash('zap'); vibrate(15);
+  ring(W / 2, H / 2, '#7fd0ff', 10 * U, 70 * U, .25);
+  const t = findTarget();
+  if (t && t.kind === 'm') { run.hits++; damageMosquito(t.m, t.p); }
+  else if (t && t.kind === 'b') { run.hits++; hitBase(CFG.baseDamage, t.p); }
+  else { run.combo = 1; Sound.miss(); }
+  if (ammo <= 0 && state === 'PLAYING') startReload();
+}
+function damageMosquito(m, p) {
+  m.hp--; m.hitFlash = .12;
+  if (m.hp > 0) { Sound.tone(300, .1, 'square', .12, 600); pfx(p.x, p.y, 6, ['#fff', '#ffd23f'], 160, .35, 4); m.dist = Math.min(1, m.dist + .18); return; }
+  killMosquito(m, p);
+}
+function killMosquito(m, p) {
+  const T = TYPES[m.type], idx = mosq.indexOf(m);
+  if (idx >= 0) mosq.splice(idx, 1);
+  run.combo = (run.t - run.lastKill < 2.5) ? Math.min(5, run.combo + 1) : 1;
+  run.lastKill = run.t;
+  const pts = T.pts * run.combo; run.score += pts; run.kills++;
+  Sound.kill(); vibrate(25);
+  pfx(p.x, p.y, 14, ['#8dff4a', '#fff', '#ffd23f'], 260, .55, 5);
+  ring(p.x, p.y, '#fff', 6 * U, 46 * U, .3);
+  burst(p.x, p.y - 10 * U, ['ZAP!', 'BOOM!', 'POW!'][Math.floor(Math.random() * 3)]);
+  floaty(p.x, p.y - 60 * U, run.combo > 1 ? `+${pts}  x${run.combo}` : `+${pts}`, run.combo > 1 ? '#ffd23f' : '#fff');
+  uiScore();
+  if (!base.exposed) { charge++; uiCharge(); if (charge >= CFG.killsToExpose) exposeBase(); }
+  if (!sponsorReady) { sponsorKills++; if (sponsorKills >= sponsorNeed) { sponsorReady = true; toast(`¡${CFG.sponsor.name} listo! Tocá el botón naranja`, 2200); } uiSponsor(); }
+}
+function exposeBase() {
+  base.exposed = true; base.timer = CFG.exposeSeconds; $('banner').hidden = false; uiCharge();
+  Sound.expose(); vibrate([60, 40, 60]); flash('zap'); toast('¡Cayó el escudo! Encontrá el criadero y dale ZAP!', 2400);
+}
+function unexpose() {
+  base.exposed = false; charge = 0; $('banner').hidden = true; uiCharge(); spawnT = .6;
+  toast('El criadero recuperó el escudo…', 1600);
+}
+function hitBase(dmg, p) {
+  if (state !== 'PLAYING') return;
+  const q = p || project(base.yaw, base.pitch);
+  base.hp = Math.max(0, base.hp - dmg); base.hitFlash = .15; shake = 8;
+  Sound.hitBase(); vibrate(40);
+  pfx(q.x, q.y, 12, ['#ffb703', '#e0312b', '#fff'], 260, .5, 5);
+  burst(q.x, q.y - 20 * U, 'BOOM!');
+  uiBase();
+  if (base.hp <= 0) finish(true);
+}
+function bite() {
+  if (state !== 'PLAYING') return;
+  run.lives--; run.bites++; charge = Math.max(0, charge - 3); run.combo = 1; shake = 14;
+  flash('bite'); Sound.bite(); vibrate([80, 40, 120]);
+  uiLives(); uiCharge(); toast('¡Picadura! −1 vida', 1300);
+  if (run.lives <= 0) finish(false);
+}
+function useSponsor() {
+  if (state !== 'PLAYING' || !sponsorReady) return;
+  sponsorReady = false; sponsorKills = 0; run.sponsorUsed++; sponsorNeed = 12 + 5 * run.sponsorUsed; uiSponsor();
+  Sound.sponsor(); flash('spon'); vibrate([100, 50, 200]);
+  parts.push({ t:'wave', x:W / 2, y:H / 2, c:'rgba(255,170,60,.9)', l:.7, m:.7 });
+  const n = mosq.length;
+  mosq.forEach(m => { const p = project(m.yaw, m.pitch); pfx(p.x, p.y, 8, ['#ffb15a', '#fff'], 200, .5, 5); run.score += TYPES[m.type].pts; run.kills++; });
+  mosq = []; uiScore();
+  toast(n ? `${CFG.sponsor.name}: ¡${n} mosquitos fuera de combate!` : `${CFG.sponsor.name}: ¡ataque desplegado!`, 2000);
+  if (base.exposed) hitBase(40); else exposeBase();
+}
+function finish(win) {
+  if (state !== 'PLAYING') return;
+  state = 'END'; $('banner').hidden = true; Sound.setBuzz(0);
+  let bonus = 0;
+  if (win) {
+    bonus = 500 * run.level + run.lives * 250; run.score += bonus; uiScore();
+    store.d.criaderos++; store.d.alarm[barrioId] = Math.max(0, getAlarm() - 12);
+    Sound.win(); vibrate([80, 50, 80, 50, 200]);
+    const q = project(base.yaw, base.pitch);
+    pfx(q.x, q.y, 40, ['#ffb703', '#e0312b', '#fff', '#8dff4a'], 380, .9, 7);
+    ring(q.x, q.y, '#ffb703', 10 * U, 160 * U, .7); burst(q.x, q.y - 30 * U, '¡BOOM!');
+    run.level++; run.lives = Math.min(CFG.lives, run.lives + 1);   // la campaña sigue: sube el nivel, no se resetea
+  } else { Sound.lose(); vibrate(300); run.lives = CFG.lives; }     // intento nuevo del mismo nivel, con vidas frescas
+  store.d.kills += run.kills;
+  const rec = run.score > store.d.best; if (rec) store.d.best = run.score;
+  store.save();
+  run.win = win; run.bonus = bonus; run.record = rec;
+  setTimeout(() => { if (state === 'END') showResult(); }, win ? 1300 : 800);
+}
+function showResult() {
+  const acc = run.shots ? Math.round(run.hits / run.shots * 100) : 0;
+  $('resTitle').textContent = run.win ? '¡CRIADERO DESTRUIDO!' : '¡TE PICARON DEMASIADO!';
+  $('resSub').textContent = run.win ? `${base.name}: eliminado. Un foco menos de dengue en el barrio.` : 'Los mosquitos ganaron esta vez. Volvé a intentarlo.';
+  $('stScore').textContent = run.score.toLocaleString('es-PY'); $('stKills').textContent = run.kills;
+  $('stAcc').textContent = acc + '%'; $('stBites').textContent = run.bites;
+  $('resRecord').hidden = !run.record;
+  $('tip').textContent = '💡 ' + TIPS[Math.floor(Math.random() * TIPS.length)].text;
+  showScreen('result');
+}
+
+/* ---------------------- BUCLE PRINCIPAL ---------------------- */
+function update(dt) {
+  run.t += dt;
+  Cam.update(dt);
+  if (base.exposed) {
+    base.timer -= dt; $('bannerBar').style.width = (clamp(base.timer / CFG.exposeSeconds, 0, 1) * 100) + '%';
+    if (base.timer <= 0) unexpose();
+  } else {
+    spawnT -= dt;
+    if (spawnT <= 0) { if (mosq.length < maxAlive()) spawnMosquito(); spawnT = spawnInterval() * rand(.8, 1.3); }
+  }
+  if (reload > 0) { reload -= dt; if (reload <= 0) { reload = 0; ammo = CFG.ammoMax; uiAmmo(); } }
+  if (base.hitFlash > 0) base.hitFlash -= dt;
+  if (run.combo > 1 && run.t - run.lastKill > 2.5) run.combo = 1;
+
+  let nearest = 1;
+  const sq = Math.sqrt(dt);
+  for (let i = mosq.length - 1; i >= 0; i--) {
+    const m = mosq[i], T = TYPES[m.type];
+    m.wing += dt * (T.spd > 1 ? 70 : 55);
+    m.vyaw += rand(-1, 1) * 26 * T.spd * sq; m.vpitch += rand(-1, 1) * 18 * T.spd * sq;   // vuelo errático
+    const damp = Math.exp(-2 * dt); m.vyaw *= damp; m.vpitch *= damp;
+    const maxA = 22 * T.spd; m.vyaw = clamp(m.vyaw, -maxA, maxA); m.vpitch = clamp(m.vpitch, -maxA * .7, maxA * .7);
+    m.yaw = normAngle(m.yaw + (m.vyaw + angDiff(Cam.yaw, m.yaw) * .12) * dt);      // te buscan
+    m.pitch = clamp(m.pitch + (m.vpitch + (6 - m.pitch) * .18) * dt, -25, 42);
+    m.dist -= m.speed * dt;
+    if (m.hitFlash > 0) m.hitFlash -= dt;
+    if (m.dist < nearest) nearest = m.dist;
+    if (m.dist <= 0) { mosq.splice(i, 1); bite(); if (state !== 'PLAYING') return; }
+  }
+  Sound.setBuzz(mosq.length ? Math.pow(clamp(1 - nearest, 0, 1), 1.5) + .1 : 0);
+  updateFx(dt);
+}
+function render() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (state === 'MENU' || state === 'MAP' || !base) return;
+  if (!camOn) drawFallbackBG();
+  ctx.save();
+  if (shake > .3) ctx.translate(rand(-shake, shake) * U, rand(-shake, shake) * U);
+  drawBase();
+  mosq.slice().sort((a, b) => b.dist - a.dist).forEach(m => {
+    const p = project(m.yaw, m.pitch);
+    if (p.x > -60 * U && p.x < W + 60 * U && p.y > -60 * U && p.y < H + 60 * U) drawMosquito(m, p.x, p.y);
+  });
+  drawParts();
+  ctx.restore();
+  drawIndicators();
+  const locked = state === 'PLAYING' ? findTarget() : null;
+  drawCrosshair(!!locked);
+  $('btnZap').classList.toggle('lock', !!locked);
+  drawRadar();
+}
+let lastT = performance.now();
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.05, (t - lastT) / 1000); lastT = t; time += dt;
+  if (state === 'PLAYING') update(dt); else if (state === 'END') updateFx(dt);
+  if (state !== 'PLAYING') Sound.setBuzz(0);
+  render();
+}
+
+/* ---------------------- MENÚS Y ENTRADAS ---------------------- */
+function refreshMenu() {
+  $('bestLine').textContent = store.d.best ? `Récord: ${store.d.best.toLocaleString('es-PY')} · Criaderos destruidos: ${store.d.criaderos} · Rango: ${rankFor(store.d.criaderos).name}` : '';
+  if (!window.isSecureContext && !$('httpsWarn')) {
+    const warn = document.createElement('div');
+    warn.id = 'httpsWarn';
+    warn.style.cssText = 'margin-top:8px;color:#ffd23f;font-weight:700';
+    warn.textContent = '⚠️ Estás en una conexión sin HTTPS: la cámara no se va a poder activar.';
+    $('bestLine').after(warn);
+  }
+}
+/* ---------------------- MAPA TÁCTICO REAL (Google Maps + GPS) ----------------------
+   La base/mosquitos siguen siendo 2D sobre la cámara (eso no se toca).
+   Lo que cambia acá es sólo el mapa de selección: en vez de un dibujo
+   inventado, es un mapa real de Paraguay con ciudades reales, y el
+   jugador puede usar su GPS para que el juego reconozca su barrio real. */
+const MAP_STYLE = [
+  { elementType:'geometry', stylers:[{ color:'#1b2b12' }] },
+  { elementType:'labels.text.fill', stylers:[{ color:'#d7e0bd' }] },
+  { elementType:'labels.text.stroke', stylers:[{ color:'#0d180a' }] },
+  { featureType:'administrative', elementType:'geometry.stroke', stylers:[{ color:'#c9d76a' }] },
+  { featureType:'water', elementType:'geometry', stylers:[{ color:'#0d180a' }] },
+  { featureType:'poi', stylers:[{ visibility:'off' }] },
+  { featureType:'road', elementType:'geometry', stylers:[{ color:'#25390f' }] },
+  { featureType:'transit', stylers:[{ visibility:'off' }] }
+];
+let gmap = null, gmapMarkers = {}, meMarker = null, mapsFailed = false, mapsLoading = null;
+
+function loadGoogleMaps() {
+  if (window.google && window.google.maps) return Promise.resolve();
+  if (mapsLoading) return mapsLoading;
+  mapsLoading = new Promise((resolve, reject) => {
+    if (!CFG.mapsApiKey || /TU_CLAVE/.test(CFG.mapsApiKey)) { reject(new Error('sin-clave')); return; }
+    window.__gmapsReady = resolve;
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(CFG.mapsApiKey)}&callback=__gmapsReady`;
+    s.async = true; s.onerror = () => reject(new Error('carga-fallida'));
+    document.head.appendChild(s);
+  });
+  return mapsLoading;
+}
+function initTacticalMap() {
+  if (gmap) return;
+  const c = curCountry();
+  gmap = new google.maps.Map($('tacticalMap'), {
+    center:c.center, zoom:c.zoom, disableDefaultUI:true, zoomControl:true, styles:MAP_STYLE
+  });
+}
+function recenterCountry() { const c = curCountry(); if (gmap) { gmap.panTo(c.center); gmap.setZoom(c.zoom); } }
+function renderMapMarkers() {
+  Object.values(gmapMarkers).forEach(m => m.setMap(null)); gmapMarkers = {};
+  allPlaces().forEach(b => {
+    const a = store.d.alarm[b.id] ?? seedAlarm(b.id), info = alarmInfo(a), sel = b.id === barrioId;
+    const marker = new google.maps.Marker({
+      position:{ lat:b.lat, lng:b.lng }, map:gmap,
+      icon:{ path:google.maps.SymbolPath.CIRCLE, scale:sel ? 15 : 10, fillColor:info.color, fillOpacity:.92, strokeColor:'#fff', strokeWeight:sel ? 3 : 2 },
+      label:{ text:'🦟', fontSize:sel ? '16px' : '13px' },
+      title:`${b.name} · alarma ${info.label}`, zIndex:sel ? 999 : 1
+    });
+    marker.addListener('click', () => selectPlace(b.id, true));
+    gmapMarkers[b.id] = marker;
+  });
+  const b = findPlace(barrioId);
+  if (gmap) gmap.panTo({ lat:b.lat, lng:b.lng });
+}
+function selectPlace(id, zoomIn) {
+  barrioId = id; store.d.barrio = id; store.save();
+  renderMap();
+  if (zoomIn && gmap) gmap.setZoom(Math.max(gmap.getZoom(), 13));
+}
+function switchCountry(code, silent) {
+  if (!COUNTRIES[code] || code === store.d.country) { $('countryList').hidden = true; return; }
+  store.d.country = code; store.d.barrio = curCountry().cities[0].id; store.save();
+  barrioId = store.d.barrio;
+  $('countryList').hidden = true;
+  if (meMarker) { meMarker.setMap(null); meMarker = null; }
+  renderMap();
+  recenterCountry();
+  if (!silent) toast(`País: ${curCountry().name}`, 1800);
+}
+function showMapFallback() {
+  $('tacticalMap').hidden = true;
+  const box = $('mapFallback'); box.hidden = false;
+  box.innerHTML = allPlaces().map(b => {
+    const a = store.d.alarm[b.id] ?? seedAlarm(b.id), info = alarmInfo(a), sel = b.id === barrioId;
+    return `<button class="city-btn" data-id="${b.id}" style="border-color:${sel ? '#ffd23f' : '#fff'};background:${info.color}26">🦟 ${b.name} <small>alarma ${info.label}</small></button>`;
+  }).join('');
+  [...box.querySelectorAll('.city-btn')].forEach(btn => btn.addEventListener('click', () => selectPlace(btn.dataset.id, false)));
+}
+function renderMap() {
+  const b = findPlace(barrioId), a = store.d.alarm[b.id] ?? seedAlarm(b.id), info = alarmInfo(a);
+  $('btnCountry').textContent = `🌎 ${curCountry().name} ▾`;
+  $('countryList').innerHTML = Object.entries(COUNTRIES).map(([code, c]) =>
+    `<button class="city-btn" data-code="${code}" style="border-color:${code === store.d.country ? '#ffd23f' : '#fff'}">${c.name}</button>`
+  ).join('');
+  [...$('countryList').querySelectorAll('.city-btn')].forEach(btn => btn.addEventListener('click', () => switchCountry(btn.dataset.code)));
+  $('barrioInfo').innerHTML =
+    `<div class="alarm-banner" style="background:${info.color}">⚠ ${b.name}: alarma ${info.label}</div>` +
+    `<div class="bar big"><i style="width:${a}%;background:${info.color}"></i></div>` +
+    `<small>Tocá una ciudad en el mapa o usá el GPS para desplegarte en tu barrio real. Cada criadero destruido baja la alarma. Con los días, los mosquitos vuelven. Datos guardados en este teléfono.</small>`;
+  $('btnMapGo').textContent = 'DESPLEGAR EN ' + b.name.toUpperCase();
+  if (mapsFailed) { showMapFallback(); return; }
+  loadGoogleMaps().then(() => {
+    $('mapFallback').hidden = true; $('tacticalMap').hidden = false;
+    initTacticalMap(); renderMapMarkers();
+  }).catch(() => { mapsFailed = true; showMapFallback(); });
+}
+function locateMe() {
+  if (!navigator.geolocation) { toast('Este navegador no tiene GPS disponible', 2400); return; }
+  const btn = $('btnLocate'); btn.classList.add('busy'); btn.disabled = true;
+  toast('Buscando tu ubicación…', 1800);
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude:lat, longitude:lng } = pos.coords;
+      const done = (name, countryCode) => { btn.classList.remove('busy'); btn.disabled = false; placeMe(lat, lng, name, countryCode); };
+      if (window.google && window.google.maps) {
+        new google.maps.Geocoder().geocode({ location:{ lat, lng } }, (results, status) => {
+          let name = null, countryCode = null;
+          if (status === 'OK' && results && results.length) {
+            const comp = t => (results[0].address_components.find(c => c.types.includes(t)) || {});
+            const barrio = comp('sublocality').long_name || comp('sublocality_level_1').long_name || comp('neighborhood').long_name;
+            const ciudad = comp('locality').long_name || comp('administrative_area_level_2').long_name;
+            name = barrio && ciudad ? `${barrio}, ${ciudad}` : (barrio || ciudad || results[0].formatted_address);
+            countryCode = comp('country').short_name || null;   // ISO2, ej. 'PY', 'AR', 'BR'
+          }
+          done(name, countryCode);
+        });
+      } else done(null, null);
+    },
+    () => { btn.classList.remove('busy'); btn.disabled = false; toast('No se pudo acceder al GPS. Revisá los permisos de ubicación.', 2800); },
+    { enableHighAccuracy:true, timeout:10000 }
+  );
+}
+function placeMe(lat, lng, name, countryCode) {
+  const country = (countryCode && COUNTRIES[countryCode]) ? countryCode : store.d.country;
+  const supported = !!(countryCode && COUNTRIES[countryCode]);
+  if (supported && countryCode !== store.d.country) switchCountry(countryCode, true);
+  const id = 'mi-' + Math.round(lat * 1000) + '-' + Math.round(lng * 1000);
+  name = name || `Mi ubicación (${lat.toFixed(3)}, ${lng.toFixed(3)})`;
+  let p = store.d.custom.find(x => x.id === id);
+  if (!p) { p = { id, name, lat, lng, country }; store.d.custom.push(p); store.d.alarm[id] = seedAlarm(id); }
+  else { p.name = name; p.country = country; }
+  store.save();
+  selectPlace(id, true);
+  if (gmap) {
+    if (meMarker) meMarker.setMap(null);
+    meMarker = new google.maps.Marker({
+      position:{ lat, lng }, map:gmap,
+      icon:{ path:google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#c9d76a', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 },
+      title:'Vos estás acá'
+    });
+    gmap.setZoom(16); renderMapMarkers();
+  }
+  toast(supported ? `Ubicación detectada: ${p.name}` : `Detectamos que estás fuera de los países cargados. Te ubicamos igual, pero probá elegir un país con 🌎 si algo no calza.`, supported ? 2800 : 4200);
+}
+function openMap() { state = 'MAP'; $('hud').hidden = true; renderMap(); showScreen('map'); }
+function toMenu() { state = 'MENU'; $('hud').hidden = true; $('banner').hidden = true; refreshMenu(); showScreen('menu'); }
+/* ---------------------- INTRO, BIENVENIDA, REGISTRO Y CARTELES EDUCATIVOS ---------------------- */
+function goWelcome() { showScreen('welcome'); }
+(function initIntro() {
+  const v = $('introVideo'), playBtn = $('btnPlayIntro');
+  let advanced = false;
+  const advance = () => { if (advanced) return; advanced = true; goWelcome(); };
+  const showIntroError = msg => {
+    playBtn.hidden = true;
+    const box = document.createElement('div');
+    box.className = 'intro-error';
+    box.innerHTML = `⚠️ No pudimos cargar el video<br><small>${msg}</small>`;
+    $('scr-intro').querySelector('.intro-wrap').appendChild(box);
+    setTimeout(advance, 2600);
+  };
+  v.addEventListener('ended', advance);
+  v.addEventListener('error', () => {
+    const codes = { 1:'reproducción cancelada', 2:'error de red', 3:'no se pudo decodificar el archivo', 4:'no se encontró assets/intro.mp4 (¿subiste la carpeta assets/ junto al HTML?)' };
+    showIntroError(codes[v.error && v.error.code] || 'error desconocido');
+  });
+  $('btnSkipIntro').onclick = advance;
+  playBtn.onclick = () => {
+    playBtn.hidden = true; v.muted = false; v.currentTime = 0;
+    v.play().catch(advance);                 // si el navegador igual bloquea el sonido, no bloqueamos el flujo
+  };
+  setTimeout(() => { if (v.readyState === 0) showIntroError('el archivo tardó demasiado o no existe'); }, 4500);
+})();
+function showRegisterOrTip() {
+  if (run.win && !store.d.player) { $('playerName').value = ''; showScreen('register'); setTimeout(() => $('playerName').focus(), 250); }
+  else showTipScreen();
+}
+function completeRegister(name) {
+  name = (name || '').trim().slice(0, 24);
+  if (name) { store.d.player = { name, country: store.d.country }; store.save(); }
+  showTipScreen();
+}
+function showTipScreen() {
+  const t = TIPS[store.d.tipIndex % TIPS.length];
+  store.d.tipIndex = (store.d.tipIndex + 1) % TIPS.length; store.save();
+  $('tipIcon').textContent = t.icon; $('tipTitle').textContent = t.title; $('tipBody').textContent = t.text;
+  showScreen('tip');
+}
+
+async function launch(btn) {
+  if (launching) return;
+  launching = true; const old = btn.textContent; btn.textContent = 'PREPARANDO…';
+  try {
+    Sound.init(); Sound.resume();
+    if (!envReady) {
+      // las dos autorizaciones se piden dentro del mismo toque (iOS lo exige)
+      const res = await Promise.all([enableGyro(), enableCamera()]);
+      envReady = true;
+      if (!res[1]) setTimeout(() => toast(camError || 'Sin cámara: escenario de práctica', 3000), 700);
+    }
+  } finally { launching = false; btn.textContent = old; }
+  if (!run) newRun(); else startLevel();
+}
+function pauseGame() { if (state !== 'PLAYING') return; state = 'PAUSED'; Sound.setBuzz(0); showScreen('pause'); }
+
+$('btnStart').onclick = () => launch($('btnStart'));
+$('btnMap').onclick = openMap;
+$('btnMapGo').onclick = () => launch($('btnMapGo'));
+$('btnLocate').onclick = locateMe;
+$('btnMapBack').onclick = toMenu;
+$('btnPause').onclick = pauseGame;
+$('btnResume').onclick = () => { if (state === 'PAUSED') { state = 'PLAYING'; showScreen(null); } };
+$('btnQuit').onclick = toMenu;
+$('btnSponsor').onclick = useSponsor;
+$('btnCenter').onclick = () => { Cam.recenter(); toast('Vista recentrada', 1000); };
+$('btnCam').onclick = retryCamera;
+$('btnCountry').onclick = () => { $('countryList').hidden = !$('countryList').hidden; };
+$('btnSound').onclick = () => {
+  store.d.sound = !store.d.sound; Sound.setOn(store.d.sound); store.save();
+  $('btnSound').textContent = store.d.sound ? '🔊' : '🔇';
+};
+$('btnJoin').onclick = () => showScreen('menu');
+$('btnContinue').onclick = () => { if (!checkPromotion()) showRegisterOrTip(); };
+$('btnPromoGo').onclick = showRegisterOrTip;
+$('btnPromoWA').onclick = () => shareWhatsApp(`🎖️ ¡Ascendí a ${$('promoRank').textContent} en la Resistencia! Ya destruí ${$('promoCount').textContent} criaderos de Aedes aegypti. Sumate a la lucha:`);
+$('btnPromoShare').onclick = () => shareGeneric(`🎖️ ¡Ascendí a ${$('promoRank').textContent} en la Resistencia! Ya destruí ${$('promoCount').textContent} criaderos de Aedes aegypti. Sumate a la lucha:`);
+$('btnRecruit').onclick = () => { updateRecruitInfo(); showScreen('recruit'); };
+$('btnRecruitBack').onclick = toMenu;
+$('btnInviteWA').onclick = inviteViaWhatsApp;
+$('btnInviteShare').onclick = () => {
+  referralCode(); store.d.invitesSent = (store.d.invitesSent || 0) + 1; store.save();
+  shareGeneric(recruitMessage() + ` (código ${store.d.refCode})`);
+  updateRecruitInfo();
+};
+$('btnRegister').onclick = () => completeRegister($('playerName').value);
+$('btnSkipRegister').onclick = () => showTipScreen();
+$('playerName').addEventListener('keydown', e => { if (e.key === 'Enter') completeRegister($('playerName').value); });
+$('btnTipGo').onclick = openMap;
+$('btnShareWA').onclick = () => shareWhatsApp(`Operación Aedes AR: ${run.score.toLocaleString('es-PY')} puntos, nivel ${run.level}, ${run.kills} mosquitos eliminados. ¿Podés superarme?`);
+$('btnShare').onclick = async () => {
+  const text = `Operación Aedes AR: ${run.score.toLocaleString('es-PY')} puntos, nivel ${run.level}, ${run.kills} mosquitos eliminados. ¿Podés superarme?`;
+  try {
+    if (navigator.share) await navigator.share({ title:'Operación Aedes AR', text, url:location.href });
+    else if (navigator.clipboard) { await navigator.clipboard.writeText(text + ' ' + location.href); toast('Copiado al portapapeles', 1500); }
+  } catch (e) {}
+};
+$('btnZap').addEventListener('pointerdown', e => { e.preventDefault(); tryShoot(); });
+
+// Tocar cualquier parte de la pantalla también dispara. Arrastrar mueve la vista (solo si no hay giroscopio).
+let ptr = null;
+canvas.addEventListener('pointerdown', e => { ptr = { id:e.pointerId, x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY, t:performance.now() }; try { canvas.setPointerCapture(e.pointerId); } catch (er) {} });
+canvas.addEventListener('pointermove', e => {
+  if (!ptr || e.pointerId !== ptr.id) return;
+  const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y; ptr.x = e.clientX; ptr.y = e.clientY;
+  if (state === 'PLAYING' && !Cam.gyro) {
+    const ppd = H / CFG.vfov;
+    Cam.tYaw = normAngle(Cam.tYaw - dx / ppd); Cam.tPitch = clamp(Cam.tPitch + dy / ppd, -60, 60);
+  }
+});
+canvas.addEventListener('pointerup', e => {
+  if (!ptr || e.pointerId !== ptr.id) return;
+  if (Math.hypot(e.clientX - ptr.sx, e.clientY - ptr.sy) < 12 && performance.now() - ptr.t < 300) tryShoot();
+  ptr = null;
+});
+canvas.addEventListener('pointercancel', () => { ptr = null; });
+
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if ((e.code === 'Space' || e.code === 'Enter') && state === 'PLAYING') { e.preventDefault(); tryShoot(); }
+  if (e.code === 'KeyP' || e.code === 'Escape') { if (state === 'PLAYING') pauseGame(); else if (state === 'PAUSED') $('btnResume').click(); }
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+
+/* ---------------------- ARRANQUE ---------------------- */
+store.load();
+captureReferral();
+barrioId = allPlaces().some(b => b.id === store.d.barrio) ? store.d.barrio : curCountry().cities[0].id;
+Sound.on = store.d.sound; $('btnSound').textContent = store.d.sound ? '🔊' : '🔇';
+try { document.fonts && document.fonts.load('20px Bungee'); } catch (e) {}
+refreshMenu();
+showScreen('intro');
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
