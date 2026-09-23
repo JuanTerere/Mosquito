@@ -120,14 +120,6 @@ button{font:inherit;color:inherit}
 .intro-wrap{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;display:flex;align-items:center;justify-content:center}
 #introVideo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:100%;height:100%;min-width:100%;min-height:100%;object-fit:cover;object-position:center}
 .btn.skip{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);right:14px;margin:0;padding:8px 16px;font-size:13px;width:auto;display:inline-block}
-.intro-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);margin:0;width:auto;
-  display:flex;flex-direction:column;align-items:center;gap:8px;font-size:34px;padding:22px 30px;
-  border-radius:20px;background:rgba(13,24,10,.72);border:3px solid #fff}
-.intro-play span{font-size:13px;font-weight:800;letter-spacing:.02em}
-.intro-error{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:80%;max-width:340px;
-  text-align:center;color:#fff;font-weight:800;font-size:16px;background:rgba(13,24,10,.85);
-  border:3px solid var(--red);border-radius:16px;padding:20px}
-.intro-error small{display:block;margin-top:8px;font-weight:600;font-size:12.5px;color:#d7e0bd}
 .warn-title{font-size:26px;line-height:1.2;color:#fff;text-shadow:0 3px 0 #000;margin:4px 0 10px}
 .warn-title span{color:var(--red);text-shadow:0 3px 0 #4a0d0a}
 #playerName{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;border:2px solid rgba(255,255,255,.4);
@@ -138,7 +130,6 @@ button{font:inherit;color:inherit}
 .ico{display:inline-block;width:1.2em;height:1.2em;object-fit:contain;vertical-align:-.22em;pointer-events:none;-webkit-user-drag:none}
 .btn .ico{margin-right:6px}
 .tools button .ico{width:22px;height:22px;vertical-align:middle}
-.intro-play .ico{width:56px;height:56px}
 .how .ico{width:1.5em;height:1.5em;margin-right:4px}
 .heart .ico{width:26px;height:26px;vertical-align:top}
 .heart.off .ico{filter:grayscale(1) brightness(.5)}
@@ -239,7 +230,6 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
   <section class="screen" id="scr-intro">
     <div class="intro-wrap">
       <video id="introVideo" src="assets/intro.mp4" playsinline preload="auto" muted></video>
-      <button class="intro-play" id="btnPlayIntro"><i data-ico="play"></i><span>TOCÁ PARA ESCUCHAR AL GENERAL</span></button>
       <button class="btn ghost skip" id="btnSkipIntro">Saltar ▶</button>
     </div>
   </section>
@@ -644,7 +634,7 @@ const keys = {};
    Si cambiás un dibujo y no se actualiza, subí ICON_VER. */
 const ICON_VER = 1;
 const ICONS = {
-  pausa:'⏸', sonido_on:'🔊', sonido_off:'🔇', camara:'📷', recentrar:'⌖', play:'▶',
+  pausa:'⏸', sonido_on:'🔊', sonido_off:'🔇', camara:'📷', recentrar:'⌖',
   apuntar:'🎯', energia:'⚡', neumatico:'🛞', mapa:'🗺️', casco:'🪖', mundo:'🌎', ubicacion:'📍',
   whatsapp:'📲', medalla:'🎖️', alerta:'⚠️', candado:'🔒', objetivo:'🎯', corazon:'♥', corazon_vacio:'♥',
   mosquito:'🦟', huevo:'🥚', larva:'🐛', balde:'🪣', cepillo:'🧹', planta:'🌱', reloj:'🕐', termometro:'🌡️', manos:'🤝'
@@ -1547,7 +1537,7 @@ function toMenu() { state = 'MENU'; $('hud').hidden = true; $('banner').hidden =
 /* ---------------------- INTRO, BIENVENIDA, REGISTRO Y CARTELES EDUCATIVOS ---------------------- */
 function goWelcome() { showScreen('welcome'); }
 (function initIntro() {
-  const v = $('introVideo'), playBtn = $('btnPlayIntro');
+  const v = $('introVideo');
   let advanced = false;
   // Algunos navegadores Android calculan mal el "cover" de un <video> vertical
   // (se ve recortado/zoomeado en vez de cubrir la pantalla). Para evitarlo,
@@ -1566,25 +1556,20 @@ function goWelcome() { showScreen('welcome'); }
   window.addEventListener('orientationchange', () => setTimeout(fitIntroVideo, 200));
   fitIntroVideo();
   const advance = () => { if (advanced) return; advanced = true; goWelcome(); };
-  const showIntroError = msg => {
-    playBtn.hidden = true;
-    const box = document.createElement('div');
-    box.className = 'intro-error';
-    box.innerHTML = `${ico('alerta')} No pudimos cargar el video<br><small>${msg}</small>`;
-    $('scr-intro').querySelector('.intro-wrap').appendChild(box);
-    setTimeout(advance, 2600);
-  };
   v.addEventListener('ended', advance);
-  v.addEventListener('error', () => {
-    const codes = { 1:'reproducción cancelada', 2:'error de red', 3:'no se pudo decodificar el archivo', 4:'no se encontró assets/intro.mp4 (¿subiste la carpeta assets/ junto al HTML?)' };
-    showIntroError(codes[v.error && v.error.code] || 'error desconocido');
-  });
+  v.addEventListener('error', advance);       // si el video no carga, pasa directo al juego
+  v.addEventListener('stalled', () => setTimeout(() => { if (v.readyState < 3) advance(); }, 3000));
   $('btnSkipIntro').onclick = advance;
-  playBtn.onclick = () => {
-    playBtn.hidden = true; v.muted = false; v.currentTime = 0;
-    v.play().catch(advance);                 // si el navegador igual bloquea el sonido, no bloqueamos el flujo
-  };
-  setTimeout(() => { if (v.readyState === 0) showIntroError('el archivo tardó demasiado o no existe'); }, 4500);
+  // Arranca solo. Primero intenta con sonido; si el navegador lo bloquea, lo reproduce sin sonido;
+  // si tampoco deja reproducir, sigue al juego sin frenarse.
+  v.muted = false;
+  const start = v.play();
+  if (start && start.catch) start.catch(() => {
+    v.muted = true;
+    const again = v.play();
+    if (again && again.catch) again.catch(advance);
+  });
+  setTimeout(() => { if (v.readyState === 0) advance(); }, 4500);
 })();
 function showRegisterOrTip() {
   if (run.win && !store.d.player) { $('playerName').value = ''; showScreen('register'); setTimeout(() => $('playerName').focus(), 250); }
