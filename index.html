@@ -387,7 +387,7 @@ const CFG = {
   // Settings → API) y corré supabase_schema.sql en el SQL Editor del proyecto.
   // Si dejás esto vacío, el juego sigue funcionando 100% offline (solo localStorage),
   // simplemente no se sube nada a la base de datos.
-  supabaseUrl: 'https://yyhwsrnjdnimajcwuyoa.supabase.co/rest/v1/',
+  supabaseUrl: 'https://yyhwsrnjdnimajcwuyoa.supabase.co',   // solo la URL base, sin /rest/v1/
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5aHdzcm5qZG5pbWFqY3d1eW9hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjgzNzgsImV4cCI6MjEwNTg0NDM3OH0._O-h-YhsfwV1WP_PiHD4Xb4NKTeiBJFoAvZb8_3bKyU'
 };
 
@@ -1797,7 +1797,34 @@ barrioId = allPlaces().some(b => b.id === store.d.barrio) ? store.d.barrio : cur
 Analytics.init(); 
 Analytics.upsertPlayer();
 
-// AQUI AGREGAS LA LLAMADA A LA BASE DE DATOS:
+/* ---------------------- DIAGNÓSTICO DE ARCHIVOS ----------------------
+   Abrí el juego con ?debug al final del link (ej: .../Mosquito/?debug) y aparece
+   un panel con cada imagen/video: si carga, su tamaño real y si algo falla. */
+if (/[?&]debug\b/.test(location.search)) {
+  const files = ['a_la_guerra.png', 'intro.mp4', 'mosquito_soldado_1.png', 'mosquito_soldado_2.png', 'mosquito_general_1.png', 'mosquito_general_2.png',
+    'criadero_cubierta.png', 'criadero_balde.png', 'criadero_latas.png', 'criadero_maceta.png',
+    'icons/balde.png', 'icons/huevo.png', 'icons/larva.png', 'icons/planta.png', 'icons/reloj.png'];
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:8px;z-index:99999;background:rgba(0,0,0,.92);color:#fff;font:12px/1.5 monospace;padding:12px;overflow:auto;border:2px solid #ffd23f;border-radius:10px';
+  box.innerHTML = '<b style="color:#ffd23f">DIAGNÓSTICO DE ARCHIVOS</b> <span style="float:right" onclick="this.parentNode.remove()">[cerrar]</span><div id="dbgRows">revisando…</div>';
+  document.body.appendChild(box);
+  const rows = [];
+  Promise.all(files.map(f => fetch('assets/' + f + '?d=' + Date.now(), { cache: 'no-store' }).then(async r => {
+    const ct = r.headers.get('content-type') || '?', kb = r.ok ? Math.round((await r.blob()).size / 1024) : 0;
+    if (!r.ok) return rows.push(`<div style="color:#ff6b6b">✖ ${f} — NO ENCONTRADO (${r.status}). Revisá que esté en /assets/ y el nombre sea idéntico (mayúsculas incluidas)</div>`);
+    if (f.endsWith('.png') && !/image\/png/.test(ct)) return rows.push(`<div style="color:#ff6b6b">✖ ${f} — el servidor no lo entrega como imagen (${ct})</div>`);
+    if (f.endsWith('.mp4')) return rows.push(`<div style="color:#9f9">✔ ${f} — ${kb} KB</div>`);
+    return new Promise(res => {
+      const im = new Image();
+      im.onload = () => { const big = kb > 500; rows.push(`<div style="color:${big ? '#ffd23f' : '#9f9'}">${big ? '⚠' : '✔'} ${f} — ${im.naturalWidth}×${im.naturalHeight}px, ${kb} KB${big ? ' (pesado)' : ''}</div>`); res(); };
+      im.onerror = () => { rows.push(`<div style="color:#ff6b6b">✖ ${f} — se descargó pero está corrupto o no es una imagen válida</div>`); res(); };
+      im.src = 'assets/' + f + '?d=' + Date.now();
+    });
+  }).catch(() => rows.push(`<div style="color:#ff6b6b">✖ ${f} — error de red</div>`)))).then(() => {
+    document.getElementById('dbgRows').innerHTML = rows.sort().join('');
+  });
+}
+
 loadSponsors();
 
 Sound.on = store.d.sound; setSoundIcon();
