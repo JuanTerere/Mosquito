@@ -424,7 +424,7 @@ const SPRITES = {
   soldado: [new Image(), new Image()],
   general: [new Image(), new Image()]
 };
-const ASSET_V = 3;   // subilo si cambiás un PNG y el navegador sigue mostrando el viejo (caché)
+const ASSET_V = 4;   // subilo si cambiás un PNG y el navegador sigue mostrando el viejo (caché)
 /* Si un sprite trae fondo blanco opaco, se lo quita solo (recorre desde los bordes hacia adentro). */
 function cleanSprite(img) {
   try {
@@ -444,6 +444,30 @@ function cleanSprite(img) {
       if (x > 0) push(x - 1, y); if (x < w - 1) push(x + 1, y);
       if (y > 0) push(x, y - 1); if (y < h - 1) push(x, y + 1);
     }
+    // manchas blancas grandes encerradas (ej: el hueco entre el asa y el balde)
+    const minBlob = w * h * 0.004;
+    for (let k0 = 0; k0 < w * h; k0++) {
+      if (seen[k0] || !bg(k0 * 4)) continue;
+      const blob = [k0]; seen[k0] = 1;
+      for (let q = 0; q < blob.length; q++) {
+        const k = blob[q], x = k % w, y = (k / w) | 0;
+        if (x > 0) { const n = k - 1; if (!seen[n] && bg(n * 4)) { seen[n] = 1; blob.push(n); } }
+        if (x < w - 1) { const n = k + 1; if (!seen[n] && bg(n * 4)) { seen[n] = 1; blob.push(n); } }
+        if (y > 0) { const n = k - w; if (!seen[n] && bg(n * 4)) { seen[n] = 1; blob.push(n); } }
+        if (y < h - 1) { const n = k + w; if (!seen[n] && bg(n * 4)) { seen[n] = 1; blob.push(n); } }
+      }
+      if (blob.length > minBlob) blob.forEach(k => { p[k * 4 + 3] = 0; });
+    }
+    // sacar el "halo" claro que queda pegado al borde recortado
+    for (let it = 0; it < 2; it++) {
+      const kill = [];
+      for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+        const i = (y * w + x) * 4;
+        if (p[i + 3] === 0 || p[i] + p[i + 1] + p[i + 2] < 560) continue;
+        if (p[((y * w + x - 1) * 4) + 3] === 0 || p[((y * w + x + 1) * 4) + 3] === 0 || p[(((y - 1) * w + x) * 4) + 3] === 0 || p[(((y + 1) * w + x) * 4) + 3] === 0) kill.push(i);
+      }
+      kill.forEach(i => { p[i + 3] = 0; });
+    }
     g.putImageData(d, 0, 0);
     c.complete = true; c.naturalWidth = w; c.naturalHeight = h;   // para que drawMosquito lo trate como imagen lista
     return c;
@@ -461,7 +485,12 @@ loadSprite('general', 0, 'mosquito_general_1.png');
 loadSprite('general', 1, 'mosquito_general_2.png');
 /* Dibujos propios de los criaderos: assets/criadero_cubierta.png, criadero_balde.png, criadero_latas.png y criadero_maceta.png
    (PNG transparente, el objeto apoyado abajo). Si un archivo no existe, se usa el dibujo hecho por código. */
-const BASE_ART = ['criadero_cubierta', 'criadero_balde', 'criadero_latas', 'criadero_maceta'].map(n => { const im = new Image(); im.src = `assets/${n}.png?v=${ASSET_V}`; return im; });
+const BASE_ART = ['criadero_cubierta', 'criadero_balde', 'criadero_latas', 'criadero_maceta'].map((n, i) => {
+  const im = new Image();
+  im.onload = () => { BASE_ART[i] = cleanSprite(im); };   // si el PNG trae fondo blanco, se lo quita solo
+  im.src = `assets/${n}.png?v=${ASSET_V}`;
+  return im;
+});
 const BASE_NAMES = ['Llanta con agua','Balde olvidado','Latas y botellas','Plato de maceta con agua'];
 const BASE_H = [2.4, 2.4, 1.9, 2.4];   // alto del dibujo de cada criadero (en radios)
 
@@ -660,7 +689,7 @@ const keys = {};
    Si el archivo todavía no existe, se muestra el emoji de reemplazo,
    así podés ir sumando dibujos de a poco sin romper nada.
    Si cambiás un dibujo y no se actualiza, subí ICON_VER. */
-const ICON_VER = 3;
+const ICON_VER = 4;
 const ICONS = {
   pausa:'⏸', sonido_on:'🔊', sonido_off:'🔇', camara:'📷', recentrar:'⌖',
   neumatico:'🛞', mapa:'🗺️', casco:'🪖', mundo:'🌎', ubicacion:'📍',
