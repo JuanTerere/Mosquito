@@ -395,7 +395,7 @@ const SPRITES = {
   soldado: [new Image(), new Image()],
   general: [new Image(), new Image()]
 };
-const ASSET_V = 2;   // subilo si cambiás un PNG y el navegador sigue mostrando el viejo (caché)
+const ASSET_V = 3;   // subilo si cambiás un PNG y el navegador sigue mostrando el viejo (caché)
 /* Si un sprite trae fondo blanco opaco, se lo quita solo (recorre desde los bordes hacia adentro). */
 function cleanSprite(img) {
   try {
@@ -430,10 +430,11 @@ loadSprite('soldado', 0, 'mosquito_soldado_1.png');
 loadSprite('soldado', 1, 'mosquito_soldado_2.png');
 loadSprite('general', 0, 'mosquito_general_1.png');
 loadSprite('general', 1, 'mosquito_general_2.png');
-/* Dibujos propios de los criaderos: assets/criadero_cubierta.png, criadero_balde.png y criadero_latas.png
+/* Dibujos propios de los criaderos: assets/criadero_cubierta.png, criadero_balde.png, criadero_latas.png y criadero_maceta.png
    (PNG transparente, el objeto apoyado abajo). Si un archivo no existe, se usa el dibujo hecho por código. */
-const BASE_ART = ['criadero_cubierta', 'criadero_balde', 'criadero_latas'].map(n => { const im = new Image(); im.src = `assets/${n}.png?v=${ASSET_V}`; return im; });
-const BASE_NAMES = ['Llanta con agua','Balde olvidado','Latas y botellas'];
+const BASE_ART = ['criadero_cubierta', 'criadero_balde', 'criadero_latas', 'criadero_maceta'].map(n => { const im = new Image(); im.src = `assets/${n}.png?v=${ASSET_V}`; return im; });
+const BASE_NAMES = ['Llanta con agua','Balde olvidado','Latas y botellas','Plato de maceta con agua'];
+const BASE_H = [2.4, 2.4, 1.9, 2.4];   // alto del dibujo de cada criadero (en radios)
 
 /* Países soportados. Cada uno tiene sus ciudades reales "atacadas" en el mapa.
    Arrancamos con Paraguay como país principal; Argentina, Brasil y los de
@@ -630,14 +631,17 @@ const keys = {};
    Si el archivo todavía no existe, se muestra el emoji de reemplazo,
    así podés ir sumando dibujos de a poco sin romper nada.
    Si cambiás un dibujo y no se actualiza, subí ICON_VER. */
-const ICON_VER = 1;
+const ICON_VER = 3;
 const ICONS = {
   pausa:'⏸', sonido_on:'🔊', sonido_off:'🔇', camara:'📷', recentrar:'⌖',
   neumatico:'🛞', mapa:'🗺️', casco:'🪖', mundo:'🌎', ubicacion:'📍',
   whatsapp:'📲', medalla:'🎖️', alerta:'⚠️', candado:'🔒', objetivo:'🎯', corazon:'♥', corazon_vacio:'♥',
   mosquito:'🦟', huevo:'🥚', larva:'🐛', balde:'🪣', cepillo:'🧹', planta:'🌱', reloj:'🕐', termometro:'🌡️', manos:'🤝'
 };
-const ico = name => `<img class="ico" src="assets/icons/${name}.png?v=${ICON_VER}" alt="" draggable="false" onerror="this.outerHTML=ICONS['${name}']||''">`;
+/* Iconos que reutilizan otros dibujos que ya están en assets/ (no hace falta un archivo aparte) */
+const ICON_SRC = { neumatico:'assets/criadero_cubierta.png', mosquito:'assets/mosquito_soldado_1.png' };
+const iconSrc = name => `${ICON_SRC[name] || `assets/icons/${name}.png`}?v=${ICON_VER}`;
+const ico = name => `<img class="ico" src="${iconSrc(name)}" alt="" draggable="false" onerror="this.outerHTML=ICONS['${name}']||''">`;
 function hydrateIcons(root) { (root || document).querySelectorAll('[data-ico]').forEach(el => { el.outerHTML = ico(el.dataset.ico); }); }
 hydrateIcons();
 const escHTML = t => String(t).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -901,7 +905,7 @@ function drawFallbackBG() {
 
 /* ---------------------- CRIADERO ---------------------- */
 function makeBase() {
-  const type = (run.level - 1) % 3;
+  const type = (run.level - 1) % 4;
   const maxHp = 60 + 30 * run.level;
   return { yaw: (Math.random() < .5 ? -1 : 1) * rand(70, 140), pitch: -17, r: 62, type,
     name: BASE_NAMES[type], hp: maxHp, maxHp, exposed: false, timer: 0, hitFlash: 0 };
@@ -984,7 +988,7 @@ function drawBase() {
   const x = p.x, y = p.y, r = base.r * U;
   ctx.save();
   const art = BASE_ART[base.type], hasArt = art && art.complete && art.naturalWidth > 0;
-  const ah = r * 2.4, aw = hasArt ? ah * art.naturalWidth / art.naturalHeight : 0;
+  const ah = r * BASE_H[base.type], aw = hasArt ? ah * art.naturalWidth / art.naturalHeight : 0;
   const gy = hasArt ? y + ah / 2 : y + r * .72;          // punto donde el criadero toca el piso
   const sw = hasArt ? aw * .55 : r * 1.1;                 // sombra de contacto: lo apoya en el suelo
   const sg = ctx.createRadialGradient(x, gy, sw * .1, x, gy, sw);
@@ -992,7 +996,7 @@ function drawBase() {
   ctx.fillStyle = sg; ctx.beginPath(); ctx.ellipse(x, gy, sw, sw * .3, 0, 0, TAU); ctx.fill();
   if (base.exposed) { ctx.shadowColor = '#ff3b30'; ctx.shadowBlur = (28 + 10 * Math.sin(time * 10)) * U; }
   if (hasArt) ctx.drawImage(art, x - aw / 2, y - ah / 2, aw, ah);
-  else if (base.type === 0) drawTire(x, y, r); else if (base.type === 1) drawBucket(x, y, r); else drawCans(x, y, r);
+  else if (base.type === 0) drawTire(x, y, r); else if (base.type === 2) drawCans(x, y, r); else drawBucket(x, y, r);
   ctx.shadowBlur = 0;
   if (base.hitFlash > 0 && hasArt) {
     ctx.globalAlpha = clamp(base.hitFlash * 4, 0, .8); ctx.globalCompositeOperation = 'lighter';
