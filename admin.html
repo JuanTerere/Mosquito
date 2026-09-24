@@ -143,16 +143,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
-    // Configuración de Supabase: REEMPLAZA ESTOS DOS VALORES
-    const supabaseUrl = 'https://yyhwsrnjdnimajcwuyoa.supabase.co/rest/v1/'; 
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5aHdzcm5qZG5pbWFqY3d1eW9hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjgzNzgsImV4cCI6MjEwNTg0NDM3OH0._O-h-YhsfwV1WP_PiHD4Xb4NKTeiBJFoAvZb8_3bKyU';        
+    // Configuración de Supabase
+    const supabaseUrl = 'TU_URL_DE_SUPABASE'; 
+    const supabaseKey = 'TU_ANON_KEY';        
     
-    // Esta línea se asegura de crear la variable una sola vez
-    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+    // Cambiamos el nombre de la variable a "db" para que no choque con la librería
+    const db = window.supabase.createClient(supabaseUrl, supabaseKey);
 
     // SISTEMA DE LOGIN
     async function checkSession() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await db.auth.getSession();
       if (session) {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('dashboard').style.display = 'block';
@@ -168,7 +168,7 @@
     async function login() {
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await db.auth.signInWithPassword({ email, password });
       
       if (error) {
         document.getElementById('loginError').innerText = "Acceso denegado: " + error.message;
@@ -179,7 +179,7 @@
     }
 
     async function logout() {
-      await supabase.auth.signOut();
+      await db.auth.signOut();
       checkSession();
     }
 
@@ -187,7 +187,7 @@
     async function loadTacticalData() {
       const countryFilter = document.getElementById('filterCountry').value;
       
-      let query = supabase.from('players').select('*').order('total_criaderos', { ascending: false });
+      let query = db.from('players').select('*').order('total_criaderos', { ascending: false });
       if (countryFilter !== 'ALL') {
         query = query.eq('country', countryFilter);
       }
@@ -223,7 +223,7 @@
 
     // SISTEMA DE INVASIONES LEOPS
     async function loadActiveInvasions() {
-      const { data, error } = await supabase.from('active_invasions').select('*').eq('active', true);
+      const { data, error } = await db.from('active_invasions').select('*').eq('active', true);
       let list = '';
       if(data && data.length > 0) {
         data.forEach(inv => {
@@ -244,7 +244,7 @@
       const intensity = document.getElementById('invLevel').value;
       if(!city) return alert("Ingresa el ID del barrio o ciudad.");
 
-      const { error } = await supabase.from('active_invasions').upsert({ 
+      const { error } = await db.from('active_invasions').upsert({ 
         city_id: city, 
         intensity: parseInt(intensity), 
         active: true 
@@ -258,13 +258,13 @@
     }
 
     async function cancelInvasion(city) {
-      await supabase.from('active_invasions').update({ active: false }).eq('city_id', city);
+      await db.from('active_invasions').update({ active: false }).eq('city_id', city);
       loadActiveInvasions();
     }
 
     // SISTEMA DE SPONSORS
     async function loadSponsorsTable() {
-      const { data: sponsors } = await supabase.from('country_sponsors').select('*');
+      const { data: sponsors } = await db.from('country_sponsors').select('*');
       let tbody = '';
       if (sponsors) {
         sponsors.forEach(s => {
@@ -282,7 +282,7 @@
       const code = document.getElementById('inCountry').value.toUpperCase();
       const name = document.getElementById('inSponsor').value;
       if (!code || !name) return alert("Completa los datos del sponsor.");
-      const { error } = await supabase.from('country_sponsors').upsert({ country_code: code, sponsor_name: name });
+      const { error } = await db.from('country_sponsors').upsert({ country_code: code, sponsor_name: name });
       if (!error) {
         document.getElementById('inCountry').value = '';
         document.getElementById('inSponsor').value = '';
@@ -292,7 +292,7 @@
 
     async function deleteSponsor(code) {
       if(confirm("¿Retirar tropas de sponsor de " + code + "?")) {
-        await supabase.from('country_sponsors').delete().eq('country_code', code);
+        await db.from('country_sponsors').delete().eq('country_code', code);
         loadSponsorsTable();
       }
     }
