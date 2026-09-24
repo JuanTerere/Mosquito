@@ -1794,7 +1794,12 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 store.load();
 captureReferral();
 barrioId = allPlaces().some(b => b.id === store.d.barrio) ? store.d.barrio : curCountry().cities[0].id;
-Analytics.init(); Analytics.upsertPlayer();
+Analytics.init(); 
+Analytics.upsertPlayer();
+
+// AQUI AGREGAS LA LLAMADA A LA BASE DE DATOS:
+loadSponsors();
+
 Sound.on = store.d.sound; setSoundIcon();
 try { document.fonts && document.fonts.load('20px Bungee'); } catch (e) {}
 refreshMenu();
