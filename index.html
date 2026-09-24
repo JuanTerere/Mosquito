@@ -357,6 +357,7 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
   </section>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 'use strict';
 /* =====================================================================
@@ -375,12 +376,35 @@ const CFG = {
   reloadSeconds: 1.1,  // tiempo de recarga
   lives: 3,
   hitAssist: 40,       // tolerancia de puntería (px). Más alto = más fácil
-  sponsor: { name: 'TU MARCA' },  // nombre que aparece en el botón "Ataque Sponsor"
+  sponsor: { name: 'TU MARCA' },  // sponsor por defecto si el país todavía no tiene uno negociado (ver SPONSORS abajo)
   // Clave de la API de Google Maps (Maps JavaScript API + Geocoding API habilitadas).
   // Sacala gratis en https://console.cloud.google.com/google/maps-apis — sin ella,
   // el mapa cae automáticamente a una lista de ciudades sin mapa visual.
-  mapsApiKey: 'TU_CLAVE_DE_GOOGLE_MAPS_AQUI'
+  mapsApiKey: 'TU_CLAVE_DE_GOOGLE_MAPS_AQUI',
+  // Proyecto de Supabase para guardar jugadores, partidas, criaderos, mosquitos,
+  // consejos entregados y uso del sponsor. Creá un proyecto gratis en
+  // https://supabase.com, pegá acá la URL y la clave "anon public" (Project
+  // Settings → API) y corré supabase_schema.sql en el SQL Editor del proyecto.
+  // Si dejás esto vacío, el juego sigue funcionando 100% offline (solo localStorage),
+  // simplemente no se sube nada a la base de datos.
+  supabaseUrl: '',
+  supabaseAnonKey: ''
 };
+
+/* Sponsor de la "herramienta especial" (ataque que limpia todos los mosquitos
+   en pantalla) por país. Cada país se negocia con un sponsor distinto: cuando
+   cierres el acuerdo en un país, cambiá acá el nombre (y opcionalmente logoUrl,
+   si querés mostrar una imagen en vez de texto — no incluido en el HUD todavía).
+   Un país sin entrada acá usa CFG.sponsor como reemplazo. */
+const SPONSORS = {
+  PY: { name: 'TU MARCA' },
+  AR: { name: 'TU MARCA' },
+  BR: { name: 'TU MARCA' },
+  GT: { name: 'TU MARCA' },
+  CR: { name: 'TU MARCA' },
+  PA: { name: 'TU MARCA' }
+};
+const currentSponsor = () => SPONSORS[store.d.country] || CFG.sponsor;
 
 const LEVEL_TITLES = ['Recluta de Barrio','Escuadrón Táctico','Protector del Paraguay','Comandante Anti-Dengue','Leyenda del Descacharreo'];
 
@@ -657,12 +681,15 @@ const setSoundIcon = () => { $('btnSound').innerHTML = ico(store.d.sound ? 'soni
 
 /* ---------------------- GUARDADO LOCAL (0 costo) ---------------------- */
 const store = {
-  d: { best:0, kills:0, criaderos:0, sound:true, seen:false, country:'PY', barrio:'asuncion', last:Date.now(), alarm:{}, custom:[], player:null, tipIndex:0, refCode:null, referredBy:null, invitesSent:0, lastRankMin:0 },
+  d: { uid:null, best:0, kills:0, criaderos:0, sound:true, seen:false, country:'PY', barrio:'asuncion', last:Date.now(), alarm:{}, custom:[], player:null, tipIndex:0, refCode:null, referredBy:null, invitesSent:0, lastRankMin:0 },
   load() {
     try { const raw = localStorage.getItem('aedesar.v1'); if (raw) Object.assign(this.d, JSON.parse(raw)); } catch (e) {}
     if (!this.d.alarm || typeof this.d.alarm !== 'object') this.d.alarm = {};
     if (!Array.isArray(this.d.custom)) this.d.custom = [];
     if (!COUNTRIES[this.d.country]) this.d.country = 'PY';
+    if (!this.d.uid) {   // identidad estable de este dispositivo/instalación, para las mediciones en Supabase
+      this.d.uid = (crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+    }
     const days = Math.max(0, (Date.now() - (this.d.last || Date.now())) / 864e5);
     allCities().concat(this.d.custom).forEach(b => {      // los mosquitos vuelven con el tiempo, en todos los países
       let a = this.d.alarm[b.id];
@@ -674,6 +701,84 @@ const store = {
   },
   save() { try { localStorage.setItem('aedesar.v1', JSON.stringify(this.d)); } catch (e) {} }
 };
+
+/* ---------------------- MEDICIONES (Supabase) ----------------------
+   Todo acá es "mejor esfuerzo": si no hay internet, si Supabase no está
+   configurado (CFG.supabaseUrl vacío), o si un insert falla, el juego
+   sigue jugándose igual — nunca se bloquea ni se rompe por esto.
+   Ver supabase_schema.sql para crear las tablas la primera vez. */
+const Analytics = (() => {
+  let client = null, playerRow = null, sessionId = null, ready = false;
+  function init() {
+    if (ready) return;
+    ready = true;
+    if (!CFG.supabaseUrl || !CFG.supabaseAnonKey || typeof window.supabase === 'undefined') return;
+    try { client = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey); } catch (e) { client = null; }
+  }
+  const on = () => !!client;
+
+  // Crea o actualiza la fila del jugador (upsert por device_id) y trae su id.
+  async function upsertPlayer() {
+    if (!on()) return;
+    try {
+      const payload = {
+        device_id: store.d.uid,
+        name: (store.d.player && store.d.player.name) || null,
+        country: store.d.country,
+        city_id: barrioId || store.d.barrio,
+        ref_code: store.d.refCode || null,
+        referred_by: store.d.referredBy || null,
+        best_score: store.d.best || 0,
+        total_kills: store.d.kills || 0,
+        total_criaderos: store.d.criaderos || 0,
+        invites_sent: store.d.invitesSent || 0,
+        last_seen: new Date().toISOString()
+      };
+      const { data, error } = await client.from('players').upsert(payload, { onConflict: 'device_id' }).select().single();
+      if (!error) playerRow = data;
+    } catch (e) {}
+  }
+
+  // Un intento de nivel (llega a "finish", gane o pierda). Guarda país/ciudad/barrio jugados,
+  // mosquitos y criaderos eliminados y si usó la herramienta del sponsor.
+  async function trackSession({ win, level, score, kills, sponsorUses, sponsorName }) {
+    if (!on()) return;
+    try {
+      await client.from('game_sessions').insert({
+        device_id: store.d.uid,
+        country: store.d.country,
+        city_id: barrioId || store.d.barrio,
+        level, win, score, kills,
+        criaderos_destroyed: win ? 1 : 0,
+        sponsor_uses: sponsorUses || 0,
+        sponsor_name: sponsorName || null
+      });
+    } catch (e) {}
+  }
+
+  // Un uso puntual de la herramienta especial del sponsor (para reportarle al sponsor
+  // cuántas veces se activó su marca, por país/ciudad — dato clave para negociar).
+  async function trackSponsorUse(sponsorName, mosquitosEliminados) {
+    if (!on()) return;
+    try {
+      await client.from('sponsor_events').insert({
+        device_id: store.d.uid, country: store.d.country, city_id: barrioId || store.d.barrio,
+        sponsor_name: sponsorName, mosquitos_eliminados: mosquitosEliminados || 0
+      });
+    } catch (e) {}
+  }
+
+  // Cada consejo/tip que se le muestra a un jugador.
+  async function trackTip(tipTitle) {
+    if (!on()) return;
+    try {
+      await client.from('tip_events').insert({ device_id: store.d.uid, country: store.d.country, tip_title: tipTitle });
+    } catch (e) {}
+  }
+
+  return { init, upsertPlayer, trackSession, trackSponsorUse, trackTip };
+})();
+
 function alarmInfo(a) {
   return a >= 67 ? { label:'alta', color:'#e0312b' } : a >= 34 ? { label:'media', color:'#f59e0b' } : { label:'baja', color:'#22c55e' };
 }
@@ -1215,7 +1320,7 @@ function startLevel() {
   const b = findPlace(barrioId), info = alarmInfo(getAlarm());
   $('barrioTag').innerHTML = `${ico('ubicacion')} ${escHTML(b.name)} · alarma ${info.label}`;
   if (info.label === 'alta') Sound.siren(2);
-  $('spName').textContent = CFG.sponsor.name;
+  $('spName').textContent = currentSponsor().name;
   uiScore(); uiLevel(); uiLives(); uiAmmo(); uiBase(); uiCharge(); uiSponsor();
   if (!store.d.seen && run.level === 1) {
     store.d.seen = true; store.save();
@@ -1256,7 +1361,7 @@ function killMosquito(m, p) {
   floaty(p.x, p.y - 60 * U, run.combo > 1 ? `+${pts}  x${run.combo}` : `+${pts}`, run.combo > 1 ? '#ffd23f' : '#fff');
   uiScore();
   if (!base.exposed) { charge++; uiCharge(); if (charge >= CFG.killsToExpose) exposeBase(); }
-  if (!sponsorReady) { sponsorKills++; if (sponsorKills >= sponsorNeed) { sponsorReady = true; toast(`¡${CFG.sponsor.name} listo! Tocá el botón naranja`, 2200); } uiSponsor(); }
+  if (!sponsorReady) { sponsorKills++; if (sponsorKills >= sponsorNeed) { sponsorReady = true; toast(`¡${currentSponsor().name} listo! Tocá el botón naranja`, 2200); } uiSponsor(); }
 }
 function exposeBase() {
   base.exposed = true; base.timer = CFG.exposeSeconds; $('banner').hidden = false; uiCharge();
@@ -1291,7 +1396,8 @@ function useSponsor() {
   const n = mosq.length;
   mosq.forEach(m => { const p = project(m.yaw, m.pitch); pfx(p.x, p.y, 8, ['#ffb15a', '#fff'], 200, .5, 5); run.score += TYPES[m.type].pts; run.kills++; });
   mosq = []; uiScore();
-  toast(n ? `${CFG.sponsor.name}: ¡${n} mosquitos fuera de combate!` : `${CFG.sponsor.name}: ¡ataque desplegado!`, 2000);
+  toast(n ? `${currentSponsor().name}: ¡${n} mosquitos fuera de combate!` : `${currentSponsor().name}: ¡ataque desplegado!`, 2000);
+  Analytics.trackSponsorUse(currentSponsor().name, n);
   if (base.exposed) hitBase(40); else exposeBase();
 }
 function finish(win) {
@@ -1311,6 +1417,8 @@ function finish(win) {
   const rec = run.score > store.d.best; if (rec) store.d.best = run.score;
   store.save();
   run.win = win; run.bonus = bonus; run.record = rec;
+  Analytics.trackSession({ win, level: run.level, score: run.score, kills: run.kills, sponsorUses: run.sponsorUsed, sponsorName: currentSponsor().name });
+  Analytics.upsertPlayer();
   setTimeout(() => { if (state === 'END') showResult(); }, win ? 1300 : 800);
 }
 function showResult() {
@@ -1585,12 +1693,13 @@ function showRegisterOrTip() {
 }
 function completeRegister(name) {
   name = (name || '').trim().slice(0, 24);
-  if (name) { store.d.player = { name, country: store.d.country }; store.save(); }
+  if (name) { store.d.player = { name, country: store.d.country }; store.save(); Analytics.upsertPlayer(); }
   showTipScreen();
 }
 function showTipScreen() {
   const t = TIPS[store.d.tipIndex % TIPS.length];
   store.d.tipIndex = (store.d.tipIndex + 1) % TIPS.length; store.save();
+  Analytics.trackTip(t.title);
   $('tipIcon').innerHTML = ico(t.icon); $('tipTitle').textContent = t.title; $('tipBody').textContent = t.text;
   showScreen('tip');
 }
@@ -1680,6 +1789,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 store.load();
 captureReferral();
 barrioId = allPlaces().some(b => b.id === store.d.barrio) ? store.d.barrio : curCountry().cities[0].id;
+Analytics.init(); Analytics.upsertPlayer();
 Sound.on = store.d.sound; setSoundIcon();
 try { document.fonts && document.fonts.load('20px Bungee'); } catch (e) {}
 refreshMenu();
