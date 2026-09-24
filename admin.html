@@ -141,12 +141,18 @@
 
   </div>
 
-  // Configuración de Supabase
+  <!-- Librería de Supabase (faltaba: sin esto no existe window.supabase y el login nunca funciona) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    // Configuración de Supabase
     const supabaseUrl = 'https://yyhwsrnjdnimajcwuyoa.supabase.co'; 
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5aHdzcm5qZG5pbWFqY3d1eW9hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjgzNzgsImV4cCI6MjEwNTg0NDM3OH0._O-h-YhsfwV1WP_PiHD4Xb4NKTeiBJFoAvZb8_3bKyU';        
     
     // Cambiamos el nombre de la variable a "db" para que no choque con la librería
     const db = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+    // Los nombres los escriben los jugadores: se escapan para que no puedan inyectar código en este panel
+    const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
     // SISTEMA DE LOGIN
     async function checkSession() {
@@ -191,6 +197,7 @@
       }
 
       const { data: players, error } = await query;
+      if (error) { alert('No se pudieron leer los jugadores: ' + error.message + '\n(Si dice "permission denied" o viene vacío, falta una política RLS de lectura para usuarios autenticados en la tabla players.)'); return; }
 
       if (players) {
         let kills = 0, criaderos = 0, invites = 0;
@@ -203,8 +210,8 @@
 
           if(index < 10) {
             tbody += `<tr>
-              <td><strong>${p.name || 'Agente Anónimo'}</strong></td>
-              <td>${p.city_id || 'Desconocido'} (${p.country || 'PY'})</td>
+              <td><strong>${esc(p.name || 'Agente Anónimo')}</strong></td>
+              <td>${esc(p.city_id || 'Desconocido')} (${esc(p.country || 'PY')})</td>
               <td>${p.total_criaderos || 0}</td>
               <td>${p.total_kills || 0}</td>
             </tr>`;
@@ -227,8 +234,8 @@
         data.forEach(inv => {
           list += `<li style="margin-bottom:8px;">
             <span class="threat-level">[${inv.intensity}%]</span> 
-            <strong>${inv.city_id.toUpperCase()}</strong> 
-            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px; float:right;" onclick="cancelInvasion('${inv.city_id}')">FRENAR</button>
+            <strong>${esc(inv.city_id.toUpperCase())}</strong> 
+            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px; float:right;" onclick="cancelInvasion(this.dataset.c)" data-c="${esc(inv.city_id)}">FRENAR</button>
           </li>`;
         });
       } else {
@@ -248,7 +255,8 @@
         active: true 
       });
 
-      if(!error) {
+      if (error) return alert('No se pudo lanzar la invasión: ' + error.message);
+      {
         document.getElementById('invCity').value = '';
         alert("¡Invasión iniciada en " + city.toUpperCase() + "! Ya puedes anunciarlo en redes.");
         loadActiveInvasions();
@@ -267,9 +275,9 @@
       if (sponsors) {
         sponsors.forEach(s => {
           tbody += `<tr>
-            <td>${s.country_code}</td>
-            <td style="color:var(--yellow);">${s.sponsor_name}</td>
-            <td><button class="btn btn-danger" onclick="deleteSponsor('${s.country_code}')">Retirar</button></td>
+            <td>${esc(s.country_code)}</td>
+            <td style="color:var(--yellow);">${esc(s.sponsor_name)}</td>
+            <td><button class="btn btn-danger" onclick="deleteSponsor(this.dataset.c)" data-c="${esc(s.country_code)}">Retirar</button></td>
           </tr>`;
         });
       }
