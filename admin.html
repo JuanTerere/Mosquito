@@ -79,10 +79,6 @@
         <option value="AR">Argentina</option>
         <option value="BR">Brasil</option>
       </select>
-      <select id="filterCity" onchange="loadTacticalData()">
-        <option value="ALL">Todas las Ciudades / Barrios</option>
-        <!-- Se podría poblar dinámicamente -->
-      </select>
       <button class="btn" onclick="loadTacticalData()">ACTUALIZAR RADAR</button>
     </div>
 
@@ -147,9 +143,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
-    // Configuración de Supabase
+    // Configuración de Supabase: REEMPLAZA ESTOS DOS VALORES
     const supabaseUrl = 'https://yyhwsrnjdnimajcwuyoa.supabase.co/rest/v1/'; 
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5aHdzcm5qZG5pbWFqY3d1eW9hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjgzNzgsImV4cCI6MjEwNTg0NDM3OH0._O-h-YhsfwV1WP_PiHD4Xb4NKTeiBJFoAvZb8_3bKyU';       
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5aHdzcm5qZG5pbWFqY3d1eW9hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjgzNzgsImV4cCI6MjEwNTg0NDM3OH0._O-h-YhsfwV1WP_PiHD4Xb4NKTeiBJFoAvZb8_3bKyU';        
+    
+    // Esta línea se asegura de crear la variable una sola vez
     const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
     // SISTEMA DE LOGIN
@@ -205,7 +203,6 @@
           criaderos += p.total_criaderos || 0;
           invites += p.invites_sent || 0;
 
-          // Poblar el top 10 de soldados
           if(index < 10) {
             tbody += `<tr>
               <td><strong>${p.name || 'Agente Anónimo'}</strong></td>
