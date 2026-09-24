@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cuartel General - AEDES ATTACK</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root { --navy: #060f04; --green: #4f7942; --lime: #8dff4a; --red: #e0312b; --yellow: #ffd23f; }
+    body { font-family: 'Share Tech Mono', monospace; background: var(--navy); color: var(--lime); margin: 0; padding: 0; overflow-x: hidden; }
+    
+    /* Efecto Scanline de Radar */
+    body::after { content: " "; display: block; position: fixed; top: 0; left: 0; bottom: 0; right: 0; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)); z-index: 2; background-size: 100% 2px, 3px 100%; pointer-events: none; }
+
+    h1, h2, h3 { font-family: 'Bungee', cursive; color: var(--yellow); font-weight: normal; margin-top: 0; }
+    
+    /* Pantalla de Login */
+    #loginScreen { position: fixed; inset: 0; background: var(--navy); z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .login-box { border: 2px solid var(--green); padding: 30px; background: rgba(0,20,0,0.8); text-align: center; box-shadow: 0 0 20px rgba(141, 255, 74, 0.2); }
+    .login-box input { display: block; width: 100%; margin: 10px 0; padding: 10px; background: #000; border: 1px solid var(--green); color: var(--lime); font-family: inherit; box-sizing: border-box; }
+    
+    /* Panel Principal */
+    #dashboard { display: none; padding: 20px; max-width: 1200px; margin: auto; position: relative; z-index: 3; }
+    
+    .top-bar { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--green); padding-bottom: 10px; margin-bottom: 20px; }
+    .top-bar button { background: transparent; border: 1px solid var(--red); color: var(--red); padding: 5px 15px; cursor: pointer; font-family: inherit; }
+    .top-bar button:hover { background: var(--red); color: #fff; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
+    .card { background: rgba(0, 20, 0, 0.6); padding: 20px; border-left: 4px solid var(--lime); border-bottom: 1px solid var(--green); border-right: 1px solid var(--green); border-top: 1px solid var(--green); }
+    .card .num { font-size: 38px; color: #fff; font-family: 'Bungee', cursive; display: block; margin-top: 10px; text-shadow: 0 0 10px var(--lime); }
+    
+    .panel-section { border: 1px solid var(--green); background: rgba(0,0,0,0.5); padding: 20px; margin-bottom: 20px; }
+    
+    /* Tablas tácticas */
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+    th, td { padding: 10px; border-bottom: 1px solid var(--green); text-align: left; }
+    th { color: var(--yellow); text-transform: uppercase; }
+    tr:hover { background: rgba(141, 255, 74, 0.1); }
+
+    /* Controles e Inputs */
+    select, input, button.btn { background: #000; border: 1px solid var(--green); color: var(--lime); padding: 8px 12px; font-family: inherit; cursor: pointer; margin-right: 5px; }
+    button.btn { background: var(--green); color: #000; font-weight: bold; border: none; }
+    button.btn:hover { background: var(--lime); box-shadow: 0 0 10px var(--lime); }
+    button.btn-danger { background: #4a0000; color: var(--red); border: 1px solid var(--red); }
+    button.btn-danger:hover { background: var(--red); color: #fff; }
+
+    .threat-level { color: var(--red); font-weight: bold; font-size: 18px; animation: blink 1s infinite alternate; }
+    @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
+  </style>
+</head>
+<body>
+
+  <!-- PANTALLA DE LOGIN -->
+  <div id="loginScreen">
+    <div class="login-box">
+      <h2>ACCESO RESTRINGIDO</h2>
+      <p>Identificación Requerida</p>
+      <input type="email" id="email" placeholder="Correo de Agente">
+      <input type="password" id="password" placeholder="Contraseña">
+      <button class="btn" style="width:100%" onclick="login()">INICIAR SESIÓN</button>
+      <p id="loginError" style="color: var(--red); display:none;"></p>
+    </div>
+  </div>
+
+  <!-- DASHBOARD TÁCTICO -->
+  <div id="dashboard">
+    <div class="top-bar">
+      <h1>CUARTEL GENERAL - AEDES ATTACK</h1>
+      <button onclick="logout()">DESCONECTAR</button>
+    </div>
+
+    <!-- Filtros Tácticos -->
+    <div class="panel-section">
+      <label>Filtro de Territorio:</label>
+      <select id="filterCountry" onchange="loadTacticalData()">
+        <option value="ALL">Global (Todos los Países)</option>
+        <option value="PY">Paraguay</option>
+        <option value="AR">Argentina</option>
+        <option value="BR">Brasil</option>
+      </select>
+      <select id="filterCity" onchange="loadTacticalData()">
+        <option value="ALL">Todas las Ciudades / Barrios</option>
+        <!-- Se podría poblar dinámicamente -->
+      </select>
+      <button class="btn" onclick="loadTacticalData()">ACTUALIZAR RADAR</button>
+    </div>
+
+    <!-- Métricas Globales -->
+    <div class="grid">
+      <div class="card">Soldados Activos<span class="num" id="totPlayers">0</span></div>
+      <div class="card">Mosquitos Eliminados<span class="num" id="totKills">0</span></div>
+      <div class="card">Criaderos Neutralizados<span class="num" id="totCriaderos">0</span></div>
+      <div class="card">Reclutamientos<span class="num" id="totInvites">0</span></div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 2fr 1fr;">
+      
+      <!-- Ranking de Resistencia -->
+      <div class="panel-section">
+        <h2>Fuerzas de Resistencia (Top Soldados)</h2>
+        <table>
+          <thead>
+            <tr><th>Soldado</th><th>Territorio</th><th>Criaderos</th><th>Mosquitos</th></tr>
+          </thead>
+          <tbody id="topSoldiersTable">
+            <!-- Filas dinámicas -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Control de Invasiones (LiveOps) -->
+      <div class="panel-section" style="border-color: var(--red);">
+        <h2 style="color: var(--red);">ORDEN DE INVASIÓN</h2>
+        <p style="font-size: 12px;">Asigna una invasión masiva a un barrio para generar un evento comunitario.</p>
+        <input type="text" id="invCity" placeholder="ID Barrio (ej: asuncion, sajonia)" style="width: 100%; margin-bottom: 10px;">
+        <select id="invLevel" style="width: 100%; margin-bottom: 10px; color: var(--red);">
+          <option value="100">Alarma CRÍTICA (100%)</option>
+          <option value="75">Alarma Alta (75%)</option>
+          <option value="50">Alarma Media (50%)</option>
+        </select>
+        <button class="btn btn-danger" style="width: 100%;" onclick="launchInvasion()">LANZAR ATAQUE</button>
+        <hr style="border-color: var(--red); margin: 15px 0;">
+        <h3 style="font-size:14px;">Zonas Bajo Ataque Actual:</h3>
+        <ul id="activeInvasionsList" style="list-style: none; padding: 0; font-size: 14px;">
+          <!-- Lista dinámica -->
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Control de Sponsors -->
+    <div class="panel-section">
+      <h2>Gestión de Sponsors Regionales</h2>
+      <table>
+        <thead><tr><th>Código País</th><th>Marca Asignada</th><th>Acción</th></tr></thead>
+        <tbody id="sponsorTable"></tbody>
+      </table>
+      <div style="margin-top: 15px;">
+        <input type="text" id="inCountry" placeholder="País (Ej: PY)" maxlength="2" style="text-transform: uppercase; width: 100px;">
+        <input type="text" id="inSponsor" placeholder="Nombre de la marca / Sponsor">
+        <button class="btn" onclick="saveSponsor()">DESPLEGAR SPONSOR</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    // Configuración de Supabase
+    const supabaseUrl = 'TU_URL_DE_SUPABASE'; // Reemplazar
+    const supabaseKey = 'TU_ANON_KEY';        // Reemplazar
+    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+    // SISTEMA DE LOGIN
+    async function checkSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        loadTacticalData();
+        loadSponsorsTable();
+        loadActiveInvasions();
+      } else {
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.getElementById('dashboard').style.display = 'none';
+      }
+    }
+
+    async function login() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (error) {
+        document.getElementById('loginError').innerText = "Acceso denegado: " + error.message;
+        document.getElementById('loginError').style.display = 'block';
+      } else {
+        checkSession();
+      }
+    }
+
+    async function logout() {
+      await supabase.auth.signOut();
+      checkSession();
+    }
+
+    // CARGA DE DATOS TÁCTICOS
+    async function loadTacticalData() {
+      const countryFilter = document.getElementById('filterCountry').value;
+      
+      let query = supabase.from('players').select('*').order('total_criaderos', { ascending: false });
+      if (countryFilter !== 'ALL') {
+        query = query.eq('country', countryFilter);
+      }
+
+      const { data: players, error } = await query;
+
+      if (players) {
+        let kills = 0, criaderos = 0, invites = 0;
+        let tbody = '';
+
+        players.forEach((p, index) => {
+          kills += p.total_kills || 0;
+          criaderos += p.total_criaderos || 0;
+          invites += p.invites_sent || 0;
+
+          // Poblar el top 10 de soldados
+          if(index < 10) {
+            tbody += `<tr>
+              <td><strong>${p.name || 'Agente Anónimo'}</strong></td>
+              <td>${p.city_id || 'Desconocido'} (${p.country || 'PY'})</td>
+              <td>${p.total_criaderos || 0}</td>
+              <td>${p.total_kills || 0}</td>
+            </tr>`;
+          }
+        });
+
+        document.getElementById('totPlayers').innerText = players.length;
+        document.getElementById('totKills').innerText = kills.toLocaleString();
+        document.getElementById('totCriaderos').innerText = criaderos.toLocaleString();
+        document.getElementById('totInvites').innerText = invites.toLocaleString();
+        document.getElementById('topSoldiersTable').innerHTML = tbody;
+      }
+    }
+
+    // SISTEMA DE INVASIONES LEOPS
+    async function loadActiveInvasions() {
+      const { data, error } = await supabase.from('active_invasions').select('*').eq('active', true);
+      let list = '';
+      if(data && data.length > 0) {
+        data.forEach(inv => {
+          list += `<li style="margin-bottom:8px;">
+            <span class="threat-level">[${inv.intensity}%]</span> 
+            <strong>${inv.city_id.toUpperCase()}</strong> 
+            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px; float:right;" onclick="cancelInvasion('${inv.city_id}')">FRENAR</button>
+          </li>`;
+        });
+      } else {
+        list = '<li style="color:#666;">Zonas seguras. Ninguna invasión forzada.</li>';
+      }
+      document.getElementById('activeInvasionsList').innerHTML = list;
+    }
+
+    async function launchInvasion() {
+      const city = document.getElementById('invCity').value.toLowerCase().trim();
+      const intensity = document.getElementById('invLevel').value;
+      if(!city) return alert("Ingresa el ID del barrio o ciudad.");
+
+      const { error } = await supabase.from('active_invasions').upsert({ 
+        city_id: city, 
+        intensity: parseInt(intensity), 
+        active: true 
+      });
+
+      if(!error) {
+        document.getElementById('invCity').value = '';
+        alert("¡Invasión iniciada en " + city.toUpperCase() + "! Ya puedes anunciarlo en redes.");
+        loadActiveInvasions();
+      }
+    }
+
+    async function cancelInvasion(city) {
+      await supabase.from('active_invasions').update({ active: false }).eq('city_id', city);
+      loadActiveInvasions();
+    }
+
+    // SISTEMA DE SPONSORS
+    async function loadSponsorsTable() {
+      const { data: sponsors } = await supabase.from('country_sponsors').select('*');
+      let tbody = '';
+      if (sponsors) {
+        sponsors.forEach(s => {
+          tbody += `<tr>
+            <td>${s.country_code}</td>
+            <td style="color:var(--yellow);">${s.sponsor_name}</td>
+            <td><button class="btn btn-danger" onclick="deleteSponsor('${s.country_code}')">Retirar</button></td>
+          </tr>`;
+        });
+      }
+      document.getElementById('sponsorTable').innerHTML = tbody;
+    }
+
+    async function saveSponsor() {
+      const code = document.getElementById('inCountry').value.toUpperCase();
+      const name = document.getElementById('inSponsor').value;
+      if (!code || !name) return alert("Completa los datos del sponsor.");
+      const { error } = await supabase.from('country_sponsors').upsert({ country_code: code, sponsor_name: name });
+      if (!error) {
+        document.getElementById('inCountry').value = '';
+        document.getElementById('inSponsor').value = '';
+        loadSponsorsTable();
+      }
+    }
+
+    async function deleteSponsor(code) {
+      if(confirm("¿Retirar tropas de sponsor de " + code + "?")) {
+        await supabase.from('country_sponsors').delete().eq('country_code', code);
+        loadSponsorsTable();
+      }
+    }
+
+    // Inicializar
+    checkSession();
+  </script>
+</body>
+</html>
