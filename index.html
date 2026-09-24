@@ -392,19 +392,24 @@ const CFG = {
 };
 
 /* Sponsor de la "herramienta especial" (ataque que limpia todos los mosquitos
-   en pantalla) por país. Cada país se negocia con un sponsor distinto: cuando
-   cierres el acuerdo en un país, cambiá acá el nombre (y opcionalmente logoUrl,
-   si querés mostrar una imagen en vez de texto — no incluido en el HUD todavía).
-   Un país sin entrada acá usa CFG.sponsor como reemplazo. */
-const SPONSORS = {
-  PY: { name: 'TU MARCA' },
-  AR: { name: 'TU MARCA' },
-  BR: { name: 'TU MARCA' },
-  GT: { name: 'TU MARCA' },
-  CR: { name: 'TU MARCA' },
-  PA: { name: 'TU MARCA' }
+   en pantalla) por país. Cada país se negocia con un sponsor distinto. */
+
+let activeSponsors = {};
+const currentSponsor = () => {
+  // Retorna el sponsor dinámico de Supabase, o el por defecto de CFG si no hay uno cargado
+  return { name: activeSponsors[store.d.country] || CFG.sponsor.name };
 };
-const currentSponsor = () => SPONSORS[store.d.country] || CFG.sponsor;
+
+// Función para descargar los sponsors desde la base de datos al inicio
+async function loadSponsors() {
+  if (!CFG.supabaseUrl || typeof window.supabase === 'undefined') return;
+  try {
+    const { data } = await window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey).from('country_sponsors').select('*');
+    if (data) {
+      data.forEach(row => { activeSponsors[row.country_code] = row.sponsor_name; });
+    }
+  } catch (e) {}
+}
 
 const LEVEL_TITLES = ['Recluta de Barrio','Escuadrón Táctico','Protector del Paraguay','Comandante Anti-Dengue','Leyenda del Descacharreo'];
 
