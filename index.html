@@ -395,6 +395,7 @@ const CFG = {
    en pantalla) por país. Cada país se negocia con un sponsor distinto. */
 
 let activeSponsors = {};
+let liveInvasions = {};   // { city_id: { intensity, sponsor_name } } — invasiones programadas que ya llegaron a su hora
 const currentSponsor = () => {
   // Retorna el sponsor dinámico de Supabase, o el por defecto de CFG si no hay uno cargado
   return { name: activeSponsors[store.d.country] || CFG.sponsor.name };
@@ -408,6 +409,29 @@ async function loadSponsors() {
     if (data) {
       data.forEach(row => { activeSponsors[row.country_code] = row.sponsor_name; });
     }
+  } catch (e) {}
+}
+
+/* Invasiones programadas desde el Cuartel General (panel admin): cuando un sponsor "activa
+   su marca" en un barrio a una fecha/hora, esto sube la alarma real de ese barrio para todos
+   los jugadores apenas se cumple la hora — así el juego empuja gente real hacia esa zona. */
+async function loadInvasions() {
+  if (!CFG.supabaseUrl || typeof window.supabase === 'undefined') return;
+  try {
+    const client = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+    const { data } = await client.from('active_invasions').select('*')
+      .eq('active', true).lte('scheduled_at', new Date().toISOString());
+    if (!data) return;
+    liveInvasions = {};
+    let changed = false;
+    data.forEach(inv => {
+      liveInvasions[inv.city_id] = { intensity: inv.intensity, sponsor_name: inv.sponsor_name || null };
+      const cur = store.d.alarm[inv.city_id] ?? seedAlarm(inv.city_id);
+      if (inv.intensity > cur) { store.d.alarm[inv.city_id] = inv.intensity; changed = true; }
+    });
+    if (changed) store.save();
+    if (typeof renderMap === 'function' && !mapsFailed) { try { renderMap(); } catch (e) {} }
+    if (typeof showMapFallback === 'function' && mapsFailed) { try { showMapFallback(); } catch (e) {} }
   } catch (e) {}
 }
 
@@ -1368,7 +1392,8 @@ function startLevel() {
   Cam.recenter();
   state = 'PLAYING'; showScreen(null); $('hud').hidden = false; $('banner').hidden = true;
   const b = findPlace(barrioId), info = alarmInfo(getAlarm());
-  $('barrioTag').innerHTML = `${ico('ubicacion')} ${escHTML(b.name)} · alarma ${info.label}`;
+  const inv = liveInvasions[barrioId];
+  $('barrioTag').innerHTML = `${ico('ubicacion')} ${escHTML(b.name)} · alarma ${info.label}` + (inv ? ` · <b style="color:#ffb703">🔥 ACTIVACIÓN ESPECIAL</b>` : '');
   if (info.label === 'alta') Sound.siren(2);
   $('spName').textContent = currentSponsor().name;
   uiScore(); uiLevel(); uiLives(); uiAmmo(); uiBase(); uiCharge(); uiSponsor();
@@ -1377,6 +1402,9 @@ function startLevel() {
     toast('Girá el teléfono: hay mosquitos alrededor', 2600);
     setTimeout(() => { if (state === 'PLAYING') toast('Apuntá con la mira y tocá ZAP!', 2600); }, 2800);
   } else toast(`${base.name}: ¡encontralo!`, 2200);
+  if (inv) {
+    setTimeout(() => { if (state === 'PLAYING') toast(inv.sponsor_name ? `🔥 ${inv.sponsor_name} activa su marca en ${b.name} — ¡reforzá el ataque!` : `🔥 ¡Zona bajo ataque total en ${b.name}!`, 3000); }, 3200);
+  }
   setTimeout(() => { if (state === 'PLAYING' && !Cam.gyro) toast('Sin sensores: arrastrá el dedo para mirar', 2600); }, 1500);
 }
 function startReload() { if (reload > 0) return; reload = CFG.reloadSeconds; Sound.reload(); uiAmmo(); }
@@ -1627,8 +1655,11 @@ function showMapFallback() {
   $('tacticalMap').hidden = true;
   const box = $('mapFallback'); box.hidden = false;
   box.innerHTML = allPlaces().map(b => {
-    const a = store.d.alarm[b.id] ?? seedAlarm(b.id), info = alarmInfo(a), sel = b.id === barrioId;
-    return `<button class="city-btn" data-id="${b.id}" style="border-color:${sel ? '#ffd23f' : '#fff'};background:${info.color}26">${ico('mosquito')} ${escHTML(b.name)} <small>alarma ${info.label}</small></button>`;
+    const inv = liveInvasions[b.id];
+    const a = inv ? Math.max(inv.intensity, store.d.alarm[b.id] ?? seedAlarm(b.id)) : (store.d.alarm[b.id] ?? seedAlarm(b.id));
+    const info = alarmInfo(a), sel = b.id === barrioId;
+    const tag = inv ? ` <small style="color:#ffb703">🔥 ${inv.sponsor_name ? escHTML(inv.sponsor_name) : 'ACTIVACIÓN ESPECIAL'}</small>` : '';
+    return `<button class="city-btn" data-id="${b.id}" style="border-color:${sel ? '#ffd23f' : (inv ? '#ffb703' : '#fff')};background:${info.color}26">${ico('mosquito')} ${escHTML(b.name)} <small>alarma ${info.label}</small>${tag}</button>`;
   }).join('');
   [...box.querySelectorAll('.city-btn')].forEach(btn => btn.addEventListener('click', () => selectPlace(btn.dataset.id, false)));
 }
@@ -1871,6 +1902,8 @@ if (/[?&]debug\b/.test(location.search)) {
 }
 
 loadSponsors();
+loadInvasions();
+setInterval(loadInvasions, 5 * 60 * 1000);
 
 Sound.on = store.d.sound; setSoundIcon();
 try { document.fonts && document.fonts.load('20px Bungee'); } catch (e) {}
