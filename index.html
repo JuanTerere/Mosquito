@@ -741,13 +741,28 @@ const store = {
    configurado (CFG.supabaseUrl vacío), o si un insert falla, el juego
    sigue jugándose igual — nunca se bloquea ni se rompe por esto.
    Ver supabase_schema.sql para crear las tablas la primera vez. */
+
+/* Diagnóstico visible de Supabase: abrí el juego con ?debugdb al final del link
+   (ej: .../Mosquito/?debugdb) y cada intento de guardar muestra un cartel en pantalla. */
+const DEBUG_DB = /[?&]debugdb\b/.test(location.search);
+function dbgShow(msg, isError) {
+  if (!DEBUG_DB) return;
+  const box = document.createElement('div');
+  box.textContent = msg;
+  box.style.cssText = `position:fixed;left:8px;right:8px;z-index:99999;font:11px monospace;padding:6px 10px;border-radius:6px;color:#fff;background:${isError ? '#a11' : '#164d16'};box-shadow:0 2px 6px rgba(0,0,0,.5)`;
+  box.style.bottom = (8 + document.querySelectorAll('.dbgdb').length * 34) + 'px';
+  box.className = 'dbgdb';
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 9000);
+}
+
 const Analytics = (() => {
   let client = null, playerRow = null, sessionId = null, ready = false;
   function init() {
     if (ready) return;
     ready = true;
-    if (!CFG.supabaseUrl || !CFG.supabaseAnonKey || typeof window.supabase === 'undefined') return;
-    try { client = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey); } catch (e) { client = null; }
+    if (!CFG.supabaseUrl || !CFG.supabaseAnonKey || typeof window.supabase === 'undefined') { dbgShow('✖ Supabase no está configurado o falta la librería', true); return; }
+    try { client = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey); dbgShow('conectando a: ' + CFG.supabaseUrl); } catch (e) { client = null; dbgShow('✖ no se pudo crear el cliente: ' + e.message, true); }
   }
   const on = () => !!client;
 
@@ -769,8 +784,9 @@ const Analytics = (() => {
         last_seen: new Date().toISOString()
       };
       const { data, error } = await client.from('players').upsert(payload, { onConflict: 'device_id' }).select().single();
-      if (!error) playerRow = data;
-    } catch (e) {}
+      if (!error) { playerRow = data; dbgShow('✔ players guardado: ' + JSON.stringify(payload).slice(0, 90)); }
+      else dbgShow('✖ players FALLÓ: ' + error.message, true);
+    } catch (e) { dbgShow('✖ players excepción: ' + e.message, true); }
   }
 
   // Un intento de nivel (llega a "finish", gane o pierda). Guarda país/ciudad/barrio jugados,
