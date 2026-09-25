@@ -73,12 +73,7 @@
     <!-- Filtros Tácticos -->
     <div class="panel-section">
       <label>Filtro de Territorio:</label>
-      <select id="filterCountry" onchange="loadTacticalData()">
-        <option value="ALL">Global (Todos los Países)</option>
-        <option value="PY">Paraguay</option>
-        <option value="AR">Argentina</option>
-        <option value="BR">Brasil</option>
-      </select>
+      <select id="filterCountry" onchange="loadTacticalData()"></select>
       <button class="btn" onclick="loadTacticalData()">ACTUALIZAR RADAR</button>
     </div>
 
@@ -108,16 +103,22 @@
       <!-- Control de Invasiones (LiveOps) -->
       <div class="panel-section" style="border-color: var(--red);">
         <h2 style="color: var(--red);">ORDEN DE INVASIÓN</h2>
-        <p style="font-size: 12px;">Asigna una invasión masiva a un barrio para generar un evento comunitario.</p>
-        <input type="text" id="invCity" placeholder="ID Barrio (ej: asuncion, sajonia)" style="width: 100%; margin-bottom: 10px;">
+        <p style="font-size: 12px;">Elegí país y ciudad, y programá la fecha/hora exacta para coordinar el anuncio en redes.</p>
+        <label style="font-size:11px; display:block; margin-bottom:4px;">País:</label>
+        <select id="invCountry" style="width: 100%; margin-bottom: 10px;" onchange="fillInvCities()"></select>
+        <label style="font-size:11px; display:block; margin-bottom:4px;">Ciudad:</label>
+        <select id="invCity" style="width: 100%; margin-bottom: 10px;"></select>
+        <label style="font-size:11px; display:block; margin-bottom:4px;">Fecha y hora de lanzamiento:</label>
+        <input type="datetime-local" id="invWhen" style="width: 100%; margin-bottom: 10px;">
+        <input type="text" id="invSponsorTag" placeholder="Sponsor / Marca (opcional)" style="width: 100%; margin-bottom: 10px; box-sizing: border-box;">
         <select id="invLevel" style="width: 100%; margin-bottom: 10px; color: var(--red);">
           <option value="100">Alarma CRÍTICA (100%)</option>
           <option value="75">Alarma Alta (75%)</option>
           <option value="50">Alarma Media (50%)</option>
         </select>
-        <button class="btn btn-danger" style="width: 100%;" onclick="launchInvasion()">LANZAR ATAQUE</button>
+        <button class="btn btn-danger" style="width: 100%;" onclick="launchInvasion()">PROGRAMAR ATAQUE</button>
         <hr style="border-color: var(--red); margin: 15px 0;">
-        <h3 style="font-size:14px;">Zonas Bajo Ataque Actual:</h3>
+        <h3 style="font-size:14px;">Invasiones Programadas:</h3>
         <ul id="activeInvasionsList" style="list-style: none; padding: 0; font-size: 14px;">
           <!-- Lista dinámica -->
         </ul>
@@ -153,6 +154,101 @@
 
     // Los nombres los escriben los jugadores: se escapan para que no puedan inyectar código en este panel
     const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+    // Mismos países/ciudades que tiene el juego (index.html), para los desplegables.
+    // Si agregás un país o ciudad nueva en el juego, copiá el cambio acá también.
+    const COUNTRIES = {
+      PY: { name:'Paraguay', cities:[
+        { id:'asuncion',    name:'Asunción (Centro)' },
+        { id:'sanlorenzo',  name:'San Lorenzo' },
+        { id:'luque',       name:'Luque' },
+        { id:'capiata',     name:'Capiatá' },
+        { id:'lambare',     name:'Lambaré' },
+        { id:'fernando',    name:'Fernando de la Mora' },
+        { id:'nemby',       name:'Ñemby' },
+        { id:'limpio',      name:'Limpio' },
+        { id:'itaugua',     name:'Itauguá' },
+        { id:'mra',         name:'Mariano Roque Alonso' },
+        { id:'villaelisa',  name:'Villa Elisa' },
+        { id:'cde',         name:'Ciudad del Este' },
+        { id:'encarnacion', name:'Encarnación' },
+        { id:'coronel',     name:'Coronel Oviedo' },
+        { id:'pjc',         name:'Pedro Juan Caballero' },
+        { id:'concepcion',  name:'Concepción' }
+      ]},
+      AR: { name:'Argentina', cities:[
+        { id:'caba',        name:'CABA (Buenos Aires)' },
+        { id:'laplata',     name:'La Plata' },
+        { id:'cordoba',     name:'Córdoba' },
+        { id:'rosario',     name:'Rosario' },
+        { id:'mendoza',     name:'Mendoza' },
+        { id:'tucuman',     name:'San Miguel de Tucumán' },
+        { id:'salta',       name:'Salta' },
+        { id:'mardelplata', name:'Mar del Plata' },
+        { id:'resistencia', name:'Resistencia' },
+        { id:'posadas',     name:'Posadas' }
+      ]},
+      BR: { name:'Brasil', cities:[
+        { id:'saopaulo',    name:'São Paulo' },
+        { id:'rio',         name:'Rio de Janeiro' },
+        { id:'brasilia',    name:'Brasília' },
+        { id:'salvador',    name:'Salvador' },
+        { id:'fortaleza',   name:'Fortaleza' },
+        { id:'belohorizonte', name:'Belo Horizonte' },
+        { id:'curitiba',    name:'Curitiba' },
+        { id:'manaus',      name:'Manaus' },
+        { id:'recife',      name:'Recife' },
+        { id:'fozdoiguacu', name:'Foz do Iguaçu' }
+      ]},
+      GT: { name:'Guatemala', cities:[
+        { id:'guatecity',    name:'Ciudad de Guatemala' },
+        { id:'quetzaltenango', name:'Quetzaltenango' },
+        { id:'escuintla',    name:'Escuintla' }
+      ]},
+      CR: { name:'Costa Rica', cities:[
+        { id:'sanjosecr',    name:'San José' },
+        { id:'alajuela',     name:'Alajuela' },
+        { id:'limoncr',      name:'Limón' }
+      ]},
+      PA: { name:'Panamá', cities:[
+        { id:'panamacity',   name:'Ciudad de Panamá' },
+        { id:'colon',        name:'Colón' },
+        { id:'david',        name:'David' }
+      ]},
+      HN: { name:'Honduras', cities:[
+        { id:'tegucigalpa',  name:'Tegucigalpa' },
+        { id:'sanpedrosula', name:'San Pedro Sula' },
+        { id:'laceiba',      name:'La Ceiba' },
+        { id:'choloma',      name:'Choloma' }
+      ]},
+      SV: { name:'El Salvador', cities:[
+        { id:'sansalvador',  name:'San Salvador' },
+        { id:'santaana',     name:'Santa Ana' },
+        { id:'sanmiguelsv',  name:'San Miguel' },
+        { id:'soyapango',    name:'Soyapango' }
+      ]}
+    };
+    function cityName(country, id) {
+      const c = COUNTRIES[country]; if (!c) return id;
+      const found = c.cities.find(x => x.id === id);
+      return found ? found.name : id;
+    }
+    // Llena el filtro de territorio y el país de la orden de invasión con la lista real de países
+    function fillCountrySelects() {
+      document.getElementById('filterCountry').innerHTML =
+        '<option value="ALL">Global (Todos los Países)</option>' +
+        Object.entries(COUNTRIES).map(([code, c]) => `<option value="${code}">${esc(c.name)}</option>`).join('');
+      document.getElementById('invCountry').innerHTML =
+        Object.entries(COUNTRIES).map(([code, c]) => `<option value="${code}">${esc(c.name)}</option>`).join('');
+      fillInvCities();
+    }
+    // Llena el desplegable de ciudades según el país elegido para la invasión
+    function fillInvCities() {
+      const code = document.getElementById('invCountry').value;
+      document.getElementById('invCity').innerHTML =
+        (COUNTRIES[code] || COUNTRIES.PY).cities.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    }
+    fillCountrySelects();
 
     // SISTEMA DE LOGIN
     async function checkSession() {
@@ -211,7 +307,7 @@
           if(index < 10) {
             tbody += `<tr>
               <td><strong>${esc(p.name || 'Agente Anónimo')}</strong></td>
-              <td>${esc(p.city_id || 'Desconocido')} (${esc(p.country || 'PY')})</td>
+              <td>${esc(cityName(p.country, p.city_id) || 'Desconocido')} (${esc(p.country || 'PY')})</td>
               <td>${p.total_criaderos || 0}</td>
               <td>${p.total_kills || 0}</td>
             </tr>`;
@@ -228,43 +324,60 @@
 
     // SISTEMA DE INVASIONES LEOPS
     async function loadActiveInvasions() {
-      const { data, error } = await db.from('active_invasions').select('*').eq('active', true);
+      const { data, error } = await db.from('active_invasions').select('*').eq('active', true).order('scheduled_at', { ascending: true });
       let list = '';
       if(data && data.length > 0) {
+        const now = new Date();
         data.forEach(inv => {
-          list += `<li style="margin-bottom:8px;">
-            <span class="threat-level">[${inv.intensity}%]</span> 
-            <strong>${esc(inv.city_id.toUpperCase())}</strong> 
-            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px; float:right;" onclick="cancelInvasion(this.dataset.c)" data-c="${esc(inv.city_id)}">FRENAR</button>
+          const when = inv.scheduled_at ? new Date(inv.scheduled_at) : null;
+          const estado = when && when > now
+            ? `Programada · ${when.toLocaleString('es-PY', { dateStyle:'short', timeStyle:'short' })}`
+            : (when ? `En curso desde ${when.toLocaleString('es-PY', { dateStyle:'short', timeStyle:'short' })}` : 'En curso');
+          list += `<li style="margin-bottom:10px;">
+            <span class="threat-level">[${inv.intensity}%]</span>
+            <strong>${esc(cityName(inv.country, inv.city_id))}</strong> (${esc(inv.country || '')})
+            ${inv.sponsor_name ? `<br><span style="color:var(--yellow);">★ ${esc(inv.sponsor_name)}</span>` : ''}
+            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px; float:right;" onclick="cancelInvasion(this.dataset.id)" data-id="${esc(inv.id)}">FRENAR</button>
+            <br><small style="opacity:.75;">${esc(estado)}</small>
           </li>`;
         });
       } else {
-        list = '<li style="color:#666;">Zonas seguras. Ninguna invasión forzada.</li>';
+        list = '<li style="color:#666;">Zonas seguras. Ninguna invasión programada.</li>';
       }
       document.getElementById('activeInvasionsList').innerHTML = list;
     }
 
     async function launchInvasion() {
-      const city = document.getElementById('invCity').value.toLowerCase().trim();
+      const country = document.getElementById('invCountry').value;
+      const city = document.getElementById('invCity').value;
       const intensity = document.getElementById('invLevel').value;
-      if(!city) return alert("Ingresa el ID del barrio o ciudad.");
+      const whenLocal = document.getElementById('invWhen').value; // ej "2026-09-28T19:00", en la hora del navegador
+      const sponsor = document.getElementById('invSponsorTag').value.trim();
+      if (!whenLocal) return alert("Elegí la fecha y hora en que se lanza la invasión.");
+      const scheduledAt = new Date(whenLocal).toISOString();
 
-      const { error } = await db.from('active_invasions').upsert({ 
-        city_id: city, 
-        intensity: parseInt(intensity), 
-        active: true 
+      // Siempre inserta una fila NUEVA (no pisa invasiones anteriores de la misma ciudad):
+      // así podés tener varios sponsors activando la misma ciudad en fechas distintas.
+      const { error } = await db.from('active_invasions').insert({
+        city_id: city,
+        country,
+        intensity: parseInt(intensity),
+        scheduled_at: scheduledAt,
+        sponsor_name: sponsor || null,
+        active: true
       });
 
-      if (error) return alert('No se pudo lanzar la invasión: ' + error.message);
+      if (error) return alert('No se pudo programar la invasión: ' + error.message);
       {
-        document.getElementById('invCity').value = '';
-        alert("¡Invasión iniciada en " + city.toUpperCase() + "! Ya puedes anunciarlo en redes.");
+        document.getElementById('invWhen').value = '';
+        document.getElementById('invSponsorTag').value = '';
+        alert("Invasión programada en " + cityName(country, city) + " para el " + new Date(scheduledAt).toLocaleString('es-PY', { dateStyle:'short', timeStyle:'short' }) + (sponsor ? " (sponsor: " + sponsor + ")" : "") + ". Ya podés programar el posteo en redes.");
         loadActiveInvasions();
       }
     }
 
-    async function cancelInvasion(city) {
-      await db.from('active_invasions').update({ active: false }).eq('city_id', city);
+    async function cancelInvasion(id) {
+      await db.from('active_invasions').update({ active: false }).eq('id', id);
       loadActiveInvasions();
     }
 
