@@ -125,6 +125,14 @@ button{font:inherit;color:inherit}
 #playerName{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;border:2px solid rgba(255,255,255,.4);
   background:rgba(0,0,0,.35);color:#fff;font-size:15px;margin-bottom:10px;font-family:inherit}
 #playerName::placeholder{color:#9fae8a}
+.fld{display:block;width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;border:2px solid rgba(255,255,255,.4);
+  background:rgba(0,0,0,.35);color:#fff;font-size:15px;margin:0 0 10px;font-family:inherit;text-align:left}
+.fld[hidden]{display:none}
+.fld::placeholder{color:#9fae8a}
+select.fld option{background:#12200d;color:#fff}
+#scr-home h2{font-size:21px;line-height:1.2}
+#homeMsg{min-height:16px;margin:0 0 8px;font-size:12.5px;color:#ffd23f}
+#btnEditHome{font-size:12.5px;padding:8px 12px;margin-top:8px}
 .tip-icon{font-size:46px;text-align:center;margin-bottom:4px}
 .tip-icon .ico{width:76px;height:76px}
 .ico{display:inline-block;width:1.2em;height:1.2em;object-fit:contain;vertical-align:-.22em;pointer-events:none;-webkit-user-drag:none}
@@ -249,6 +257,23 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
     </div>
   </section>
 
+  <!-- ===== SUMATE A LA RESISTENCIA DE TU BARRIO (identidad declarada) ===== -->
+  <section class="screen" id="scr-home" hidden>
+    <div class="card">
+      <div class="tip-icon"><i data-ico="casco"></i></div>
+      <h2>SUMATE A LA RESISTENCIA<br>DE TU BARRIO</h2>
+      <p>Contanos desde dónde peleás. Así sabemos cuánta gente defiende cada barrio y qué campañas funcionan.</p>
+      <button class="btn ghost" id="btnHomeGps" style="margin-bottom:12px"><i data-ico="ubicacion"></i>USAR MI GPS</button>
+      <select class="fld" id="homeCountry" aria-label="País"></select>
+      <select class="fld" id="homeCity" aria-label="Ciudad"></select>
+      <input type="text" class="fld" id="homeCityOther" maxlength="40" placeholder="Escribí tu ciudad" autocomplete="off" hidden>
+      <input type="text" class="fld" id="homeBarrio" maxlength="40" placeholder="Tu barrio (ej: Villa Morra)" autocomplete="off">
+      <div id="homeMsg"></div>
+      <button class="btn primary" id="btnHomeOk">CONFIRMAR</button>
+      <button class="btn ghost" id="btnHomeBack" hidden>Volver</button>
+    </div>
+  </section>
+
   <!-- ===== MENÚ ===== -->
   <section class="screen" id="scr-menu" hidden>
     <div class="card">
@@ -267,6 +292,7 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
       <button class="btn primary" id="btnStart">INICIAR ASALTO</button>
       <button class="btn" id="btnMap"><i data-ico="mapa"></i>MAPA TÁCTICO</button>
       <button class="btn" id="btnRecruit"><i data-ico="casco"></i>RECLUTADOS</button>
+      <button class="btn ghost" id="btnEditHome"></button>
       <div class="fine">Pide permiso de cámara y de movimiento. Necesita HTTPS (o localhost); si no, el navegador bloquea la cámara y se activa un modo práctica sin ella. Sin sensores podés arrastrar el dedo para mirar alrededor.<br><span id="bestLine"></span></div>
     </div>
   </section>
@@ -710,6 +736,20 @@ function captureReferral() {
   const ref = new URLSearchParams(location.search).get('ref');
   if (ref && !store.d.referredBy && ref !== store.d.refCode) { store.d.referredBy = ref; store.save(); }
 }
+/* Código de campaña en el link: ?zona=VillaMorra-DengueFest (flyer / QR de una activación).
+   Se guarda UNA vez por dispositivo (la primera campaña por la que entró) y se saca de la barra
+   de direcciones, así si el jugador comparte el link no arrastra a sus amigos a esa campaña. */
+function cleanZona(raw) { return String(raw || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48); }
+function captureZona() {
+  try {
+    const u = new URL(location.href);
+    if (!u.searchParams.has('zona')) return;
+    const code = cleanZona(u.searchParams.get('zona'));
+    if (code && !store.d.zona) { store.d.zona = { code, at: Date.now() }; store.save(); }
+    u.searchParams.delete('zona');
+    history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+  } catch (e) {}
+}
 function shareGeneric(text) {
   if (navigator.share) { navigator.share({ title:'AEDES ATTACK', text, url:location.href }).catch(() => {}); return; }
   if (navigator.clipboard) navigator.clipboard.writeText(text + ' ' + location.href).then(() => toast('Copiado al portapapeles', 1500)).catch(() => {});
@@ -806,7 +846,7 @@ const setSoundIcon = () => { $('btnSound').innerHTML = ico(store.d.sound ? 'soni
 
 /* ---------------------- GUARDADO LOCAL (0 costo) ---------------------- */
 const store = {
-  d: { uid:null, best:0, kills:0, criaderos:0, sound:true, seen:false, country:'PY', barrio:'asuncion', last:Date.now(), alarm:{}, custom:[], player:null, tipIndex:0, refCode:null, referredBy:null, invitesSent:0, lastRankMin:0 },
+  d: { uid:null, best:0, kills:0, criaderos:0, sound:true, seen:false, country:'PY', barrio:'asuncion', last:Date.now(), alarm:{}, custom:[], player:null, tipIndex:0, refCode:null, referredBy:null, invitesSent:0, lastRankMin:0, home:null, zona:null },
   load() {
     try { const raw = localStorage.getItem('aedesar.v1'); if (raw) Object.assign(this.d, JSON.parse(raw)); } catch (e) {}
     if (!this.d.alarm || typeof this.d.alarm !== 'object') this.d.alarm = {};
@@ -874,8 +914,20 @@ const Analytics = (() => {
         invites_sent: store.d.invitesSent || 0,
         last_seen: new Date().toISOString()
       };
-      const { data, error } = await client.from('players').upsert(payload, { onConflict: 'device_id' }).select().single();
-      if (!error) { playerRow = data; dbgShow('✔ players guardado: ' + JSON.stringify(payload).slice(0, 90)); }
+      // Identidad declarada (barrio) y campaña de origen (?zona=). Se mandan aparte de country/city_id,
+      // que siguen siendo "dónde juega" (cambia con el Mapa Táctico); estos no se pisan al explorar.
+      const extra = {};
+      const h = store.d.home;
+      if (h) { extra.home_country = h.country; extra.home_city_id = h.cityId; extra.home_city = h.cityName; extra.home_barrio = h.barrio; extra.home_source = h.source; }
+      if (store.d.zona) { extra.campaign_zone = store.d.zona.code; extra.campaign_at = new Date(store.d.zona.at).toISOString(); }
+      let res = await client.from('players').upsert(Object.assign({}, payload, extra), { onConflict: 'device_id' }).select().single();
+      // Si todavía no corriste supabase_barrios.sql, las columnas nuevas no existen: guardamos igual lo de siempre.
+      if (res.error && Object.keys(extra).length) {
+        dbgShow('⚠ players sin columnas de barrio/campaña (¿corriste supabase_barrios.sql?): ' + res.error.message, true);
+        res = await client.from('players').upsert(payload, { onConflict: 'device_id' }).select().single();
+      }
+      const { data, error } = res;
+      if (!error) { playerRow = data; dbgShow('✔ players guardado: ' + JSON.stringify(Object.assign({}, payload, extra)).slice(0, 90)); }
       else dbgShow('✖ players FALLÓ: ' + error.message, true);
     } catch (e) { dbgShow('✖ players excepción: ' + e.message, true); }
   }
@@ -885,7 +937,7 @@ const Analytics = (() => {
   async function trackSession({ win, level, score, kills, sponsorUses, sponsorName }) {
     if (!on()) return;
     try {
-      await client.from('game_sessions').insert({
+      const row = {
         device_id: store.d.uid,
         country: store.d.country,
         city_id: barrioId || store.d.barrio,
@@ -893,7 +945,13 @@ const Analytics = (() => {
         criaderos_destroyed: win ? 1 : 0,
         sponsor_uses: sponsorUses || 0,
         sponsor_name: sponsorName || null
-      });
+      };
+      if (store.d.zona) {   // cada partida queda marcada con la campaña por la que entró este jugador
+        const { error } = await client.from('game_sessions').insert(Object.assign({}, row, { campaign_zone: store.d.zona.code }));
+        if (error) await client.from('game_sessions').insert(row);   // columna aún no creada: guardamos igual la partida
+      } else {
+        await client.from('game_sessions').insert(row);
+      }
     } catch (e) {}
   }
 
@@ -1663,6 +1721,7 @@ function frame(t) {
 
 /* ---------------------- MENÚS Y ENTRADAS ---------------------- */
 function refreshMenu() {
+  updateHomeButton();
   $('bestLine').textContent = store.d.best ? `Récord: ${store.d.best.toLocaleString('es-PY')} · Criaderos destruidos: ${store.d.criaderos} · Rango: ${rankFor(store.d.criaderos).name}` : '';
   if (!window.isSecureContext && !$('httpsWarn')) {
     const warn = document.createElement('div');
@@ -1819,6 +1878,108 @@ function placeMe(lat, lng, name, countryCode) {
   }
   toast(supported ? `Ubicación detectada: ${p.name}` : `Detectamos que estás fuera de los países cargados. Te ubicamos igual, pero probá elegir un país en el botón de arriba si algo no calza.`, supported ? 2800 : 4200);
 }
+/* ---------------------- "SUMATE A LA RESISTENCIA DE TU BARRIO" (identidad declarada) ----------------------
+   store.d.home = { country, cityId, cityName, barrio, source:'gps'|'manual' }
+   Es lo que el jugador DECLARA que es su barrio. No lo toca el Mapa Táctico (que solo decide dónde se juega). */
+const normTxt = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+let homeEditing = false, homeSource = 'manual';
+const OTHER_CITY = '__otra';
+
+function fillHomeCities(code, selectedId) {
+  const cities = (COUNTRIES[code] || COUNTRIES.PY).cities;
+  $('homeCity').innerHTML = '<option value="">Elegí tu ciudad…</option>' +
+    cities.map(c => `<option value="${escHTML(c.id)}">${escHTML(c.name)}</option>`).join('') +
+    `<option value="${OTHER_CITY}">Otra ciudad…</option>`;
+  $('homeCity').value = selectedId || '';
+  $('homeCityOther').hidden = $('homeCity').value !== OTHER_CITY;
+}
+function openHome(editing) {
+  homeEditing = !!editing;
+  const h = store.d.home;
+  $('homeCountry').innerHTML = Object.entries(COUNTRIES).map(([code, c]) => `<option value="${code}">${escHTML(c.name)}</option>`).join('');
+  const code = h ? h.country : store.d.country;
+  $('homeCountry').value = COUNTRIES[code] ? code : 'PY';
+  fillHomeCities($('homeCountry').value, h ? h.cityId : '');
+  $('homeCityOther').value = h && h.cityId === OTHER_CITY ? h.cityName : '';
+  $('homeBarrio').value = h ? h.barrio : '';
+  homeSource = h ? h.source : 'manual';
+  $('homeMsg').textContent = '';
+  $('btnHomeBack').hidden = !homeEditing;
+  showScreen('home');
+}
+function homeCityLabel() {
+  const v = $('homeCity').value;
+  if (v === OTHER_CITY) return $('homeCityOther').value.trim();
+  const c = (COUNTRIES[$('homeCountry').value] || { cities: [] }).cities.find(x => x.id === v);
+  return c ? c.name : '';
+}
+function confirmHome() {
+  const country = $('homeCountry').value, cityId = $('homeCity').value;
+  const cityName = homeCityLabel(), barrio = $('homeBarrio').value.trim().replace(/\s+/g, ' ');
+  if (!cityId) { $('homeMsg').textContent = 'Elegí tu ciudad.'; return; }
+  if (cityId === OTHER_CITY && cityName.length < 2) { $('homeMsg').textContent = 'Escribí el nombre de tu ciudad.'; $('homeCityOther').focus(); return; }
+  if (barrio.length < 2) { $('homeMsg').textContent = 'Escribí el nombre de tu barrio.'; $('homeBarrio').focus(); return; }
+  store.d.home = { country, cityId, cityName, barrio: barrio.slice(0, 40), source: homeSource };
+  // El mapa táctico arranca en tu zona (después podés jugar donde quieras sin cambiar tu barrio declarado)
+  if (COUNTRIES[country]) {
+    store.d.country = country;
+    const cities = COUNTRIES[country].cities;
+    store.d.barrio = cities.some(c => c.id === cityId) ? cityId : cities[0].id;
+    barrioId = store.d.barrio;
+  }
+  store.save();
+  Analytics.upsertPlayer();
+  if (homeEditing) { toast('Barrio actualizado', 1500); toMenu(); } else showScreen('menu');
+  refreshMenu();
+}
+const haversineKm = (a, b) => {
+  const R = 6371, rad = x => x * Math.PI / 180, dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+function applyHomeGuess(countryCode, cityText, barrioText, lat, lng) {
+  let code = countryCode && COUNTRIES[countryCode] ? countryCode : null, cityId = '', other = '';
+  if (code) {
+    const n = normTxt(cityText);
+    const hit = n && COUNTRIES[code].cities.find(c => { const m = normTxt(c.name); return m === n || (n.length >= 4 && (m.includes(n) || n.includes(m))); });
+    if (hit) cityId = hit.id; else if (cityText) { cityId = OTHER_CITY; other = cityText; }
+  } else if (lat != null) {   // sin Google: ciudad cargada más cercana (hasta 60 km)
+    let best = null, bd = 1e9;
+    Object.entries(COUNTRIES).forEach(([cc, c]) => c.cities.forEach(ct => { const d = haversineKm({ lat, lng }, ct); if (d < bd) { bd = d; best = { cc, id: ct.id }; } }));
+    if (best && bd <= 60) { code = best.cc; cityId = best.id; }
+  }
+  if (!code) { $('homeMsg').textContent = 'No pudimos ubicarte en un país cargado. Elegilo a mano.'; return; }
+  $('homeCountry').value = code; fillHomeCities(code, cityId);
+  $('homeCityOther').value = other;
+  if (barrioText) $('homeBarrio').value = barrioText;
+  homeSource = 'gps';
+  $('homeMsg').textContent = barrioText ? 'Revisá que esté bien y confirmá.' : 'Ubicamos tu ciudad. Escribí tu barrio.';
+  if (!barrioText) $('homeBarrio').focus();
+}
+function homeFromGps() {
+  if (!navigator.geolocation) { $('homeMsg').textContent = 'Este navegador no tiene GPS. Completalo a mano.'; return; }
+  const btn = $('btnHomeGps'); btn.classList.add('busy'); btn.disabled = true; $('homeMsg').textContent = 'Buscando tu ubicación…';
+  const free = () => { btn.classList.remove('busy'); btn.disabled = false; };
+  navigator.geolocation.getCurrentPosition(pos => {
+    const { latitude: lat, longitude: lng } = pos.coords;
+    // Reusa el Geocoder de Google (el mismo del Mapa Táctico); si no está disponible, cae a la ciudad más cercana
+    loadGoogleMaps().then(() => {
+      new google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
+        free();
+        if (status !== 'OK' || !results || !results.length) { applyHomeGuess(null, null, null, lat, lng); return; }
+        const comp = t => (results[0].address_components.find(c => c.types.includes(t)) || {});
+        const barrio = comp('sublocality_level_1').long_name || comp('sublocality').long_name || comp('neighborhood').long_name || '';
+        const ciudad = comp('locality').long_name || comp('administrative_area_level_2').long_name || '';
+        applyHomeGuess(comp('country').short_name || null, ciudad, barrio, lat, lng);
+      });
+    }).catch(() => { free(); applyHomeGuess(null, null, null, lat, lng); });
+  }, () => { free(); $('homeMsg').textContent = 'No pudimos acceder al GPS. Revisá el permiso o completalo a mano.'; }, { enableHighAccuracy: true, timeout: 10000 });
+}
+function updateHomeButton() {
+  const h = store.d.home;
+  $('btnEditHome').textContent = h ? `Mi barrio: ${h.barrio} · ${h.cityName} — cambiar` : '';
+  $('btnEditHome').hidden = !h;
+}
 function openMap() { state = 'MAP'; $('hud').hidden = true; renderMap(); showScreen('map'); }
 function toMenu() { state = 'MENU'; $('hud').hidden = true; $('banner').hidden = true; refreshMenu(); showScreen('menu'); }
 /* ---------------------- INTRO, BIENVENIDA, REGISTRO Y CARTELES EDUCATIVOS ---------------------- */
@@ -1907,7 +2068,14 @@ $('btnSound').onclick = () => {
   store.d.sound = !store.d.sound; Sound.setOn(store.d.sound); store.save();
   setSoundIcon();
 };
-$('btnJoin').onclick = () => showScreen('menu');
+$('btnJoin').onclick = () => { if (store.d.home) showScreen('menu'); else openHome(false); };
+$('btnHomeGps').onclick = homeFromGps;
+$('btnHomeOk').onclick = confirmHome;
+$('btnHomeBack').onclick = toMenu;
+$('btnEditHome').onclick = () => openHome(true);
+$('homeCountry').onchange = () => { fillHomeCities($('homeCountry').value, ''); homeSource = 'manual'; };
+$('homeCity').onchange = () => { $('homeCityOther').hidden = $('homeCity').value !== OTHER_CITY; homeSource = 'manual'; };
+$('homeBarrio').addEventListener('keydown', e => { if (e.key === 'Enter') confirmHome(); });
 $('btnContinue').onclick = () => { if (!checkPromotion()) showRegisterOrTip(); };
 $('btnPromoGo').onclick = showRegisterOrTip;
 $('btnPromoWA').onclick = () => shareWhatsApp(`🎖️ ¡Ascendí a ${$('promoRank').textContent} en la Resistencia! Ya destruí ${$('promoCount').textContent} criaderos de Aedes aegypti. Sumate a la lucha:`);
@@ -1958,6 +2126,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 /* ---------------------- ARRANQUE ---------------------- */
 store.load();
 captureReferral();
+captureZona();
 barrioId = allPlaces().some(b => b.id === store.d.barrio) ? store.d.barrio : curCountry().cities[0].id;
 Analytics.init(); 
 Analytics.upsertPlayer();
