@@ -166,8 +166,8 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
 .btn.ghost{background:transparent;box-shadow:none;border-color:rgba(255,255,255,.4);font-size:14px}
 .btn:disabled{opacity:.6}
 
-#tacticalMap{width:100%;height:260px;border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,.35);background:#0e1a3d}
-#mapFallback{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;padding:2px}
+#tacticalMap{width:100%;height:clamp(150px,27vh,260px);border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,.35);background:#0e1a3d}
+#mapFallback{display:flex;flex-direction:column;gap:8px;max-height:clamp(150px,27vh,260px);overflow-y:auto;padding:2px}
 #countryList{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;padding:2px;margin-bottom:8px}
 .city-btn{background:rgba(27,43,18,.95);font-family:inherit;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;
   border:2px solid #fff;color:#fff;font-weight:700;font-size:13px;text-align:left;cursor:pointer}
@@ -177,7 +177,7 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
 .alarm-banner{margin:12px 0 8px;padding:7px 10px;border-radius:10px;border:2px solid #fff;font-family:var(--display);font-size:14px;color:#fff;
   text-shadow:0 2px 0 rgba(0,0,0,.45)}
 .bar.big{height:12px;width:100%}
-#barrioInfo small{display:block;margin-top:8px;font-size:11.5px;line-height:1.4;color:#9aa7d6}
+#mapActions{position:sticky;bottom:0;margin:0 -4px;padding:4px 4px 2px;background:linear-gradient(rgba(14,24,11,0),rgba(14,24,11,.97) 14px)}
 
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
 .stats div{background:rgba(0,0,0,.35);border-radius:12px;padding:10px 6px}
@@ -310,8 +310,10 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
       <div id="tacticalMap" role="img" aria-label="Mapa con ciudades afectadas" hidden></div>
       <div id="mapFallback" hidden></div>
       <div id="barrioInfo"></div>
-      <button class="btn primary" id="btnMapGo">DESPLEGAR</button>
-      <button class="btn ghost" id="btnMapBack">Volver</button>
+      <div id="mapActions">
+        <button class="btn primary" id="btnMapGo">DESPLEGAR</button>
+        <button class="btn ghost" id="btnMapBack">Volver</button>
+      </div>
     </div>
   </section>
 
@@ -465,10 +467,21 @@ async function loadInvasions() {
     if (!data) return;
     liveInvasions = {};
     let changed = false;
+    if (!store.d.invRaised) store.d.invRaised = {};   // alarma que tenía cada ciudad ANTES de que una invasión la subiera
     data.forEach(inv => {
       liveInvasions[inv.city_id] = { intensity: inv.intensity, sponsor_name: inv.sponsor_name || null };
       const cur = store.d.alarm[inv.city_id] ?? seedAlarm(inv.city_id);
-      if (inv.intensity > cur) { store.d.alarm[inv.city_id] = inv.intensity; changed = true; }
+      if (inv.intensity > cur) {
+        if (store.d.invRaised[inv.city_id] == null) store.d.invRaised[inv.city_id] = cur;
+        store.d.alarm[inv.city_id] = inv.intensity; changed = true;
+      }
+    });
+    // Invasión frenada o vencida desde el Cuartel General: la alarma vuelve a su nivel anterior (o más baja si el jugador ya destruyó criaderos)
+    Object.keys(store.d.invRaised).forEach(id => {
+      if (liveInvasions[id]) return;
+      const cur = store.d.alarm[id] ?? seedAlarm(id);
+      store.d.alarm[id] = Math.min(cur, store.d.invRaised[id]);
+      delete store.d.invRaised[id]; changed = true;
     });
     if (changed) store.save();
     if (typeof renderMap === 'function' && !mapsFailed) { try { renderMap(); } catch (e) {} }
@@ -1821,8 +1834,7 @@ function renderMap() {
   [...$('countryList').querySelectorAll('.city-btn')].forEach(btn => btn.addEventListener('click', () => switchCountry(btn.dataset.code)));
   $('barrioInfo').innerHTML =
     `<div class="alarm-banner" style="background:${info.color}">${ico('alerta')} ${escHTML(b.name)}: alarma ${info.label}</div>` +
-    `<div class="bar big"><i style="width:${a}%;background:${info.color}"></i></div>` +
-    `<small>Tocá una ciudad en el mapa o usá el GPS para desplegarte en tu barrio real. Cada criadero destruido baja la alarma. Con los días, los mosquitos vuelven. Datos guardados en este teléfono.</small>`;
+    `<div class="bar big"><i style="width:${a}%;background:${info.color}"></i></div>`;
   $('btnMapGo').textContent = 'DESPLEGAR EN ' + b.name.toUpperCase();
   if (mapsFailed) { showMapFallback(); return; }
   loadGoogleMaps().then(() => {
