@@ -249,7 +249,11 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
     <div class="card">
       <img class="logo" src="assets/a_la_guerra.png" alt="General mosquito llamando a la guerra">
       <h1>AEDES<br><span>ATTACK</span></h1>
-      <p>Los mosquitos salen de un criadero escondido en tu barrio. Buscalos con la cámara, eliminalos y destruí el criadero antes de que te piquen.</p>
+      <p>Los mosquitos salen de un criadero escondido en tu barrio. Tenés que eliminar las dos cosas:</p>
+      <ul class="how">
+        <li><i data-ico="mosquito"></i> <b>Mosquitos:</b> girá el celular para encontrarlos, apuntá con la mira y tocá ZAP para eliminarlos antes de que te piquen.</li>
+        <li><i data-ico="balde"></i> <b>Criadero:</b> encontrá el objeto marcado (balde, neumático, maceta o lata con agua) y disparale varias veces hasta destruirlo — eso baja la alarma real del barrio.</li>
+      </ul>
       <button class="btn primary" id="btnStart">INICIAR ASALTO</button>
       <button class="btn" id="btnMap"><i data-ico="mapa"></i>MAPA TÁCTICO</button>
       <button class="btn" id="btnRecruit"><i data-ico="casco"></i>RECLUTADOS</button>
@@ -289,6 +293,7 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
   <section class="screen" id="scr-result" hidden>
     <div class="card">
       <div class="record" id="resRecord" hidden>¡NUEVO RÉCORD!</div>
+      <div class="fine" id="resPlayer" style="margin-top:0;margin-bottom:6px;font-size:13px;color:#d7e0bd"></div>
       <h2 id="resTitle">Resultado</h2>
       <p id="resSub"></p>
       <div class="stats">
@@ -297,6 +302,7 @@ h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 6px;colo
         <div><b id="stAcc">0%</b><span>Puntería</span></div>
         <div><b id="stBites">0</b><span>Picaduras</span></div>
       </div>
+      <div class="fine" id="resCommunity"></div>
       <button class="btn primary" id="btnContinue">CONTINUAR</button>
       <button class="btn" id="btnShareWA"><i data-ico="whatsapp"></i>COMPARTIR EN WHATSAPP</button>
       <button class="btn" id="btnShare"><i data-ico="casco"></i>RECLUTAR AMIGOS</button>
@@ -592,6 +598,58 @@ const COUNTRIES = {
     { id:'santaana',     name:'Santa Ana',             lat:13.9942, lng:-89.5592 },
     { id:'sanmiguelsv',  name:'San Miguel',            lat:13.4833, lng:-88.1833 },
     { id:'soyapango',    name:'Soyapango',             lat:13.7167, lng:-89.1394 }
+  ]},
+  CO: { name:'Colombia', center:{ lat:4.5, lng:-74.3 }, zoom:6, cities:[
+    { id:'bogota',      name:'Bogotá',                 lat:4.7110,  lng:-74.0721 },
+    { id:'medellin',    name:'Medellín',               lat:6.2442,  lng:-75.5812 },
+    { id:'cali',        name:'Cali',                   lat:3.4516,  lng:-76.5320 },
+    { id:'barranquilla', name:'Barranquilla',          lat:10.9685, lng:-74.7813 },
+    { id:'cucuta',      name:'Cúcuta',                 lat:7.8939,  lng:-72.5078 }
+  ]},
+  BO: { name:'Bolivia', center:{ lat:-16.5, lng:-64.9 }, zoom:6, cities:[
+    { id:'santacruzbo', name:'Santa Cruz de la Sierra', lat:-17.7833, lng:-63.1821 },
+    { id:'lapazbo',     name:'La Paz',                 lat:-16.5000, lng:-68.1500 },
+    { id:'cochabamba',  name:'Cochabamba',             lat:-17.3895, lng:-66.1568 },
+    { id:'trinidadbo',  name:'Trinidad',               lat:-14.8333, lng:-64.9000 }
+  ]},
+  DO: { name:'República Dominicana', center:{ lat:18.7, lng:-70.16 }, zoom:8, cities:[
+    { id:'santodomingo', name:'Santo Domingo',         lat:18.4861, lng:-69.9312 },
+    { id:'santiagord',  name:'Santiago',               lat:19.4517, lng:-70.6970 },
+    { id:'laromana',    name:'La Romana',              lat:18.4273, lng:-68.9728 }
+  ]},
+  MX: { name:'México', center:{ lat:23.6, lng:-102.5 }, zoom:5, cities:[
+    { id:'cdmx',        name:'Ciudad de México',       lat:19.4326, lng:-99.1332 },
+    { id:'guadalajara', name:'Guadalajara',            lat:20.6597, lng:-103.3496 },
+    { id:'monterrey',   name:'Monterrey',              lat:25.6866, lng:-100.3161 },
+    { id:'merida',      name:'Mérida',                 lat:20.9674, lng:-89.5926 },
+    { id:'acapulco',    name:'Acapulco',               lat:16.8531, lng:-99.8237 }
+  ]},
+  PE: { name:'Perú', center:{ lat:-9.19, lng:-75.02 }, zoom:6, cities:[
+    { id:'lima',        name:'Lima',                   lat:-12.0464, lng:-77.0428 },
+    { id:'piura',       name:'Piura',                  lat:-5.1945,  lng:-80.6328 },
+    { id:'iquitos',     name:'Iquitos',                lat:-3.7437,  lng:-73.2516 },
+    { id:'trujillope',  name:'Trujillo',               lat:-8.1116,  lng:-79.0288 }
+  ]},
+  VE: { name:'Venezuela', center:{ lat:8.0, lng:-66.0 }, zoom:6, cities:[
+    { id:'caracas',     name:'Caracas',                lat:10.4806, lng:-66.9036 },
+    { id:'maracaibo',   name:'Maracaibo',              lat:10.6427, lng:-71.6125 },
+    { id:'valenciave',  name:'Valencia',               lat:10.1620, lng:-68.0077 },
+    { id:'barquisimeto', name:'Barquisimeto',          lat:10.0678, lng:-69.3467 }
+  ]},
+  EC: { name:'Ecuador', center:{ lat:-1.4, lng:-78.5 }, zoom:6.5, cities:[
+    { id:'guayaquil',   name:'Guayaquil',              lat:-2.1894,  lng:-79.8891 },
+    { id:'quito',       name:'Quito',                  lat:-0.1807,  lng:-78.4678 },
+    { id:'machala',     name:'Machala',                lat:-3.2581,  lng:-79.9554 }
+  ]},
+  NI: { name:'Nicaragua', center:{ lat:12.87, lng:-85.2 }, zoom:7, cities:[
+    { id:'managua',     name:'Managua',                lat:12.1364, lng:-86.2514 },
+    { id:'leonni',      name:'León',                   lat:12.4340, lng:-86.8780 },
+    { id:'chinandega',  name:'Chinandega',             lat:12.6283, lng:-87.1314 }
+  ]},
+  CU: { name:'Cuba', center:{ lat:21.5, lng:-79.5 }, zoom:6.5, cities:[
+    { id:'lahabana',    name:'La Habana',              lat:23.1136, lng:-82.3666 },
+    { id:'santiagocuba', name:'Santiago de Cuba',      lat:20.0247, lng:-75.8219 },
+    { id:'camaguey',    name:'Camagüey',               lat:21.3808, lng:-77.9169 }
   ]}
 };
 /* Genera un número estable 15–90 a partir de un texto, para que cada
@@ -1506,7 +1564,30 @@ function showResult() {
   $('stScore').textContent = run.score.toLocaleString('es-PY'); $('stKills').textContent = run.kills;
   $('stAcc').textContent = acc + '%'; $('stBites').textContent = run.bites;
   $('resRecord').hidden = !run.record;
+  const playerName = store.d.player ? store.d.player.name : 'Agente Anónimo';
+  const rango = rankFor(store.d.criaderos).name;
+  $('resPlayer').textContent = `${playerName} · Nivel ${run.level} (${LEVEL_TITLES[Math.min(run.level - 1, LEVEL_TITLES.length - 1)]}) · Rango: ${rango}`;
+  $('resCommunity').textContent = '';
+  loadCommunityCounts();
   showScreen('result');
+}
+
+/* Cuenta cuántos jugadores hay registrados en el país y en el barrio actual, para mostrar
+   en la pantalla de resultado ("no estás solo en esto"). Usa la misma tabla 'players' que
+   ya lee el juego, así que no hace falta ningún permiso nuevo en Supabase. */
+async function loadCommunityCounts() {
+  if (!CFG.supabaseUrl || typeof window.supabase === 'undefined') return;
+  try {
+    const client = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+    const [countryRes, barrioRes] = await Promise.all([
+      client.from('players').select('id', { count:'exact', head:true }).eq('country', store.d.country),
+      client.from('players').select('id', { count:'exact', head:true }).eq('country', store.d.country).eq('city_id', barrioId)
+    ]);
+    const cCount = countryRes.count, bCount = barrioRes.count;
+    if (cCount == null && bCount == null) return;
+    const b = findPlace(barrioId);
+    $('resCommunity').textContent = `${(cCount ?? 0).toLocaleString('es-PY')} soldados en ${curCountry().name} · ${(bCount ?? 0).toLocaleString('es-PY')} en ${b.name}`;
+  } catch (e) {}
 }
 
 /* ---------------------- BUCLE PRINCIPAL ---------------------- */
