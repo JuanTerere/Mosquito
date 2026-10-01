@@ -45,6 +45,11 @@
     button.btn-danger { background: #4a0000; color: var(--red); border: 1px solid var(--red); }
     button.btn-danger:hover { background: var(--red); color: #fff; }
 
+    .muted { opacity: .7; font-size: 12px; }
+    .linkbox { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+    .linkbox input { flex: 1; min-width: 220px; }
+    #qrBox { margin-top: 12px; background: #fff; display: inline-block; padding: 8px; }
+    #qrBox:empty { display: none; }
     .threat-level { color: var(--red); font-weight: bold; font-size: 18px; animation: blink 1s infinite alternate; }
     @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
   </style>
@@ -126,6 +131,40 @@
 
     </div>
 
+    <!-- Alcance por barrio (identidad declarada por el jugador) -->
+    <div class="panel-section">
+      <h2>Alcance por Barrio</h2>
+      <p class="muted" id="barrioSummary">Cargando…</p>
+      <button class="btn" onclick="exportBarrios()">EXPORTAR CSV</button>
+      <table>
+        <thead><tr><th>Barrio</th><th>Ciudad</th><th>País</th><th>Soldados</th><th>Criaderos</th><th>Mosquitos</th></tr></thead>
+        <tbody id="barrioTable"></tbody>
+      </table>
+      <p class="muted">Cuenta a cada soldado en el barrio que <b>declaró</b> al sumarse (no donde juega). "Barrio" es texto libre: se agrupan variantes de mayúsculas, tildes y espacios. Sigue el filtro de territorio de arriba (por país declarado).</p>
+    </div>
+
+    <!-- Campañas por código de link (?zona=) -->
+    <div class="panel-section" style="border-color: var(--yellow);">
+      <h2>Campañas (flyers / QR)</h2>
+      <p class="muted">Creá un código por activación (ej. <b>villamorra-denguefest</b>). Todos los que entren por ese link quedan marcados con ese código, sin depender de que escriban bien su barrio.</p>
+      <input type="text" id="cmpCode" placeholder="código-de-campaña" maxlength="48" style="width: 260px;">
+      <button class="btn" onclick="buildCampaignLink()">GENERAR LINK</button>
+      <div class="linkbox" id="cmpLinkRow" style="display:none;">
+        <input type="text" id="cmpLink" readonly>
+        <button class="btn" onclick="copyCampaignLink()">COPIAR</button>
+      </div>
+      <div id="qrBox"></div>
+      <hr style="border-color: var(--green); margin: 18px 0;">
+      <button class="btn" onclick="loadCampaigns()">ACTUALIZAR CAMPAÑAS</button>
+      <button class="btn" onclick="exportCampaigns()">EXPORTAR CSV</button>
+      <p class="muted" id="cmpStatus"></p>
+      <table>
+        <thead><tr><th>Código</th><th>Entraron</th><th>Jugaron</th><th>Partidas</th><th>Mosquitos</th><th>Criaderos</th><th>Barrio más común</th></tr></thead>
+        <tbody id="campaignTable"></tbody>
+      </table>
+      <p class="muted"><b>Entraron</b>: dispositivos que abrieron el juego con ese código (la primera campaña que los trajo). <b>Jugaron</b>: de esos, los que completaron al menos una partida.</p>
+    </div>
+
     <!-- Control de Sponsors -->
     <div class="panel-section">
       <h2>Gestión de Sponsors Regionales</h2>
@@ -144,6 +183,8 @@
 
   <!-- Librería de Supabase (faltaba: sin esto no existe window.supabase y el login nunca funciona) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- QR para los flyers (si no carga, igual se genera el link) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
     // Configuración de Supabase
     const supabaseUrl = 'https://yyhwsrnjdnimajcwuyoa.supabase.co'; 
@@ -309,6 +350,7 @@
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('dashboard').style.display = 'block';
         loadTacticalData();
+        loadCampaigns();
         loadSponsorsTable();
         loadActiveInvasions();
       } else {
@@ -335,43 +377,155 @@
       checkSession();
     }
 
+    // Link público del juego (el mismo que usan los botones de WhatsApp del juego)
+    const GAME_URL = 'https://juanterere.github.io/Mosquito/';
+
+    // Supabase corta cada consulta en 1000 filas: pedimos de a páginas para que los conteos no queden cortos
+    async function fetchAll(make) {
+      const out = [];
+      for (let from = 0; ; from += 1000) {
+        let res = await make(true).range(from, from + 999);
+        if (res.error) res = await make(false).range(from, from + 999);   // por si la tabla no tiene columna id
+        if (res.error) return { data: null, error: res.error };
+        out.push(...res.data);
+        if (res.data.length < 1000) break;
+      }
+      return { data: out, error: null };
+    }
+
+    // Normaliza texto libre para agrupar "Villa Morra", "villa morra" y "VillaMorra" como el mismo barrio
+    const normKey = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Exportación a CSV. Los textos los escriben los jugadores: se neutralizan fórmulas (=, +, -, @) para Excel/Sheets
+    function csvCell(v) {
+      let t = String(v == null ? '' : v);
+      if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+      return '"' + t.replace(/"/g, '""') + '"';
+    }
+    function downloadCsv(name, rows) {
+      const csv = '\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    let PLAYERS = [];
+    let BARRIO_ROWS = [], CAMPAIGN_ROWS = [];
+
     // CARGA DE DATOS TÁCTICOS
     async function loadTacticalData() {
       const countryFilter = document.getElementById('filterCountry').value;
-      
-      let query = db.from('players').select('*').order('total_criaderos', { ascending: false });
-      if (countryFilter !== 'ALL') {
-        query = query.eq('country', countryFilter);
-      }
-
-      const { data: players, error } = await query;
+      const { data: all, error } = await fetchAll(ord => { const q = db.from('players').select('*'); return ord ? q.order('id') : q; });
       if (error) { alert('No se pudieron leer los jugadores: ' + error.message + '\n(Si dice "permission denied" o viene vacío, falta una política RLS de lectura para usuarios autenticados en la tabla players.)'); return; }
+      PLAYERS = all;
 
-      if (players) {
-        let kills = 0, criaderos = 0, invites = 0;
-        let tbody = '';
+      // Métricas y ranking: por país donde JUEGAN (como antes)
+      const players = all.filter(p => countryFilter === 'ALL' || p.country === countryFilter)
+                         .sort((a, b) => (b.total_criaderos || 0) - (a.total_criaderos || 0));
+      let kills = 0, criaderos = 0, invites = 0, tbody = '';
+      players.forEach((p, index) => {
+        kills += p.total_kills || 0;
+        criaderos += p.total_criaderos || 0;
+        invites += p.invites_sent || 0;
+        if (index < 10) {
+          const terr = p.home_barrio
+            ? `${esc(p.home_barrio)}, ${esc(p.home_city || cityName(p.home_country, p.home_city_id))} (${esc(p.home_country || '')})`
+            : `${esc(cityName(p.country, p.city_id) || 'Desconocido')} (${esc(p.country || 'PY')})`;
+          tbody += `<tr>
+            <td><strong>${esc(p.name || 'Agente Anónimo')}</strong></td>
+            <td>${terr}</td>
+            <td>${p.total_criaderos || 0}</td>
+            <td>${p.total_kills || 0}</td>
+          </tr>`;
+        }
+      });
+      document.getElementById('totPlayers').innerText = players.length;
+      document.getElementById('totKills').innerText = kills.toLocaleString();
+      document.getElementById('totCriaderos').innerText = criaderos.toLocaleString();
+      document.getElementById('totInvites').innerText = invites.toLocaleString();
+      document.getElementById('topSoldiersTable').innerHTML = tbody;
 
-        players.forEach((p, index) => {
-          kills += p.total_kills || 0;
-          criaderos += p.total_criaderos || 0;
-          invites += p.invites_sent || 0;
+      renderBarrios(countryFilter);
+    }
 
-          if(index < 10) {
-            tbody += `<tr>
-              <td><strong>${esc(p.name || 'Agente Anónimo')}</strong></td>
-              <td>${esc(cityName(p.country, p.city_id) || 'Desconocido')} (${esc(p.country || 'PY')})</td>
-              <td>${p.total_criaderos || 0}</td>
-              <td>${p.total_kills || 0}</td>
-            </tr>`;
-          }
-        });
+    // ALCANCE POR BARRIO: por país/ciudad/barrio DECLARADO (no por dónde juega)
+    function renderBarrios(countryFilter) {
+      const scope = PLAYERS.filter(p => countryFilter === 'ALL' || p.home_country === countryFilter);
+      const declared = scope.filter(p => p.home_barrio);
+      const groups = {};
+      declared.forEach(p => {
+        const city = p.home_city || cityName(p.home_country, p.home_city_id);
+        const key = [p.home_country, normKey(city), normKey(p.home_barrio)].join('|');
+        const g = groups[key] || (groups[key] = { country: p.home_country, city, labels: {}, n: 0, criaderos: 0, kills: 0 });
+        g.n++; g.criaderos += p.total_criaderos || 0; g.kills += p.total_kills || 0;
+        g.labels[p.home_barrio] = (g.labels[p.home_barrio] || 0) + 1;
+      });
+      BARRIO_ROWS = Object.values(groups).map(g => {
+        g.barrio = Object.entries(g.labels).sort((a, b) => b[1] - a[1])[0][0];   // la grafía más usada
+        return g;
+      }).sort((a, b) => b.n - a.n);
+      const totalAll = PLAYERS.filter(p => countryFilter === 'ALL' || p.country === countryFilter).length;
+      document.getElementById('barrioSummary').textContent =
+        `${declared.length.toLocaleString()} soldados declararon su barrio en ${BARRIO_ROWS.length.toLocaleString()} barrios` +
+        (countryFilter === 'ALL' ? ` · ${(PLAYERS.length - declared.length).toLocaleString()} todavía sin declarar (jugaron antes de este paso o no lo completaron).`
+                                 : ` · ${(totalAll).toLocaleString()} juegan en este país en total.`);
+      document.getElementById('barrioTable').innerHTML = BARRIO_ROWS.slice(0, 50).map(g => `<tr>
+          <td><strong>${esc(g.barrio)}</strong></td><td>${esc(g.city)}</td><td>${esc(g.country || '')}</td>
+          <td>${g.n}</td><td>${g.criaderos}</td><td>${g.kills}</td></tr>`).join('') ||
+        '<tr><td colspan="6" style="color:#666;">Todavía nadie declaró su barrio.</td></tr>';
+    }
+    function exportBarrios() {
+      if (!BARRIO_ROWS.length) return alert('No hay barrios para exportar.');
+      downloadCsv('barrios-aedes-attack.csv', [['Barrio', 'Ciudad', 'País', 'Soldados', 'Criaderos', 'Mosquitos']]
+        .concat(BARRIO_ROWS.map(g => [g.barrio, g.city, g.country, g.n, g.criaderos, g.kills])));
+    }
 
-        document.getElementById('totPlayers').innerText = players.length;
-        document.getElementById('totKills').innerText = kills.toLocaleString();
-        document.getElementById('totCriaderos').innerText = criaderos.toLocaleString();
-        document.getElementById('totInvites').innerText = invites.toLocaleString();
-        document.getElementById('topSoldiersTable').innerHTML = tbody;
+    // CAMPAÑAS (?zona=codigo)
+    const cleanZona = raw => String(raw || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48);
+    function buildCampaignLink() {
+      const code = cleanZona(document.getElementById('cmpCode').value);
+      if (!code) return alert('Escribí un código usando letras, números, guiones o guion bajo (ej: villamorra-denguefest).');
+      document.getElementById('cmpCode').value = code;
+      const url = GAME_URL + '?zona=' + code;
+      document.getElementById('cmpLink').value = url;
+      document.getElementById('cmpLinkRow').style.display = 'flex';
+      const box = document.getElementById('qrBox'); box.innerHTML = '';
+      try { if (window.QRCode) new QRCode(box, { text: url, width: 180, height: 180 }); } catch (e) {}
+    }
+    function copyCampaignLink() {
+      const el = document.getElementById('cmpLink'); el.select();
+      (navigator.clipboard ? navigator.clipboard.writeText(el.value) : Promise.reject()).catch(() => document.execCommand('copy'));
+    }
+    async function loadCampaigns() {
+      const status = document.getElementById('cmpStatus');
+      status.textContent = 'Cargando…';
+      const pr = await fetchAll(ord => { const q = db.from('players').select('device_id,campaign_zone,home_barrio,total_kills,total_criaderos').not('campaign_zone', 'is', null); return ord ? q.order('id') : q; });
+      const sr = await fetchAll(ord => { const q = db.from('game_sessions').select('device_id,campaign_zone,kills,criaderos_destroyed').not('campaign_zone', 'is', null); return ord ? q.order('id') : q; });
+      if (pr.error || sr.error) {
+        status.textContent = 'No se pudieron leer las campañas: ' + (pr.error || sr.error).message + ' — ¿corriste supabase_barrios.sql en Supabase?';
+        return;
       }
+      const z = {};
+      const get = c => z[c] || (z[c] = { code: c, entered: 0, devs: new Set(), sessions: 0, kills: 0, criaderos: 0, barrios: {} });
+      pr.data.forEach(p => {
+        const g = get(p.campaign_zone); g.entered++;
+        if (p.home_barrio) { const k = normKey(p.home_barrio); const b = g.barrios[k] || (g.barrios[k] = { label: p.home_barrio, n: 0 }); b.n++; }
+      });
+      sr.data.forEach(r => { const g = get(r.campaign_zone); g.devs.add(r.device_id); g.sessions++; g.kills += r.kills || 0; g.criaderos += r.criaderos_destroyed || 0; });
+      CAMPAIGN_ROWS = Object.values(z).map(g => {
+        const top = Object.values(g.barrios).sort((a, b) => b.n - a.n)[0];
+        return { code: g.code, entered: g.entered, played: g.devs.size, sessions: g.sessions, kills: g.kills, criaderos: g.criaderos, topBarrio: top ? `${top.label} (${top.n})` : '—' };
+      }).sort((a, b) => b.entered - a.entered);
+      status.textContent = CAMPAIGN_ROWS.length ? '' : 'Todavía no entró nadie por un link de campaña.';
+      document.getElementById('campaignTable').innerHTML = CAMPAIGN_ROWS.map(g => `<tr>
+          <td style="color:var(--yellow);"><strong>${esc(g.code)}</strong></td>
+          <td>${g.entered}</td><td>${g.played}${g.entered ? ` <small class="muted">(${Math.round(100 * g.played / g.entered)}%)</small>` : ''}</td>
+          <td>${g.sessions}</td><td>${g.kills.toLocaleString()}</td><td>${g.criaderos}</td><td>${esc(g.topBarrio)}</td></tr>`).join('');
+    }
+    function exportCampaigns() {
+      if (!CAMPAIGN_ROWS.length) return alert('No hay campañas para exportar.');
+      downloadCsv('campanas-aedes-attack.csv', [['Código', 'Entraron', 'Jugaron', 'Partidas', 'Mosquitos', 'Criaderos', 'Barrio más común']]
+        .concat(CAMPAIGN_ROWS.map(g => [g.code, g.entered, g.played, g.sessions, g.kills, g.criaderos, g.topBarrio])));
     }
 
     // SISTEMA DE INVASIONES LEOPS
