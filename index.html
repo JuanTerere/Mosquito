@@ -509,6 +509,57 @@ function setLang(l) {
   } catch (e) {}
 }
 
+/* ---------------------- ALARMA CENTRAL (la fija el Cuartel General) ----------------------
+   El nivel de cada ciudad vive en Supabase (vista city_alarm_live, ver supabase_alarmas.sql):
+   nivel = nivel_base que puso el admin − criaderos destruidos por TODOS los jugadores ÷ criaderos_por_punto.
+   Si la vista todavía no existe o no hay internet y no hay copia guardada, el juego sigue con el modo local de antes. */
+let serverAlarm = null;      // { city_id: nivel }  — null = modo local
+let alarmDefault = 50;       // nivel de las ciudades que el admin todavía no configuró
+let alarmLoadedAt = 0;
+let sbShared = null;
+function sbClient() {
+  if (sbShared) return sbShared;
+  if (!CFG.supabaseUrl || typeof window.supabase === 'undefined') return null;
+  try { sbShared = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey); } catch (e) {}
+  return sbShared;
+}
+async function loadAlarms(force) {
+  const client = sbClient(); if (!client) return;
+  if (!force && Date.now() - alarmLoadedAt < 20000) return;
+  try {
+    const [a, s] = await Promise.all([
+      client.from('city_alarm_live').select('city_id,level'),
+      client.from('alarm_settings').select('default_level').eq('id', 1).maybeSingle()
+    ]);
+    if (a.error || !a.data) return;          // vista no creada todavía → sigue el modo local
+    const map = {}; a.data.forEach(r => { map[r.city_id] = r.level; });
+    serverAlarm = map;
+    if (s && s.data && s.data.default_level != null) alarmDefault = s.data.default_level;
+    alarmLoadedAt = Date.now();
+    store.d.srvAlarm = { map, def: alarmDefault }; store.save();      // copia para jugar sin internet
+    if (typeof state !== 'undefined' && state === 'MAP') { try { renderMap(); } catch (e) {} }
+  } catch (e) {}
+}
+/* Ciudad a la que cuenta un lugar: las de la lista, ellas mismas; un punto de GPS, la ciudad más cercana
+   del mismo país (hasta 60 km). Fuera de eso no cuenta para ninguna ciudad. */
+function alarmCityOf(id) {
+  if (allCities().some(c => c.id === id)) return id;
+  const p = (store.d.custom || []).find(x => x.id === id);
+  if (!p) return null;
+  const list = (COUNTRIES[p.country] || curCountry()).cities;
+  let best = null, bd = 1e9;
+  list.forEach(c => { const d = haversineKm(p, c); if (d < bd) { bd = d; best = c.id; } });
+  return bd <= 60 ? best : null;
+}
+function invFor(id) { const cid = alarmCityOf(id); return (cid && liveInvasions[cid]) || liveInvasions[id] || null; }
+function alarmFor(id) {
+  let a;
+  if (serverAlarm) { const cid = alarmCityOf(id); a = (cid && serverAlarm[cid] != null) ? serverAlarm[cid] : alarmDefault; }
+  else a = store.d.alarm[id] ?? seedAlarm(id);
+  const inv = invFor(id);
+  return inv ? Math.max(a, inv.intensity) : a;
+}
+
 /* Sponsor de la "herramienta especial" (ataque que limpia todos los mosquitos
    en pantalla) por país. Cada país se negocia con un sponsor distinto. */
 
@@ -545,6 +596,7 @@ async function loadInvasions() {
     if (!store.d.invRaised) store.d.invRaised = {};   // alarma que tenía cada ciudad ANTES de que una invasión la subiera
     data.forEach(inv => {
       liveInvasions[inv.city_id] = { intensity: inv.intensity, sponsor_name: inv.sponsor_name || null };
+      if (serverAlarm) return;   // con alarma central, la invasión se combina al mostrar (alarmFor), no se guarda en el celu
       const cur = store.d.alarm[inv.city_id] ?? seedAlarm(inv.city_id);
       if (inv.intensity > cur) {
         if (store.d.invRaised[inv.city_id] == null) store.d.invRaised[inv.city_id] = cur;
@@ -1037,12 +1089,13 @@ const Analytics = (() => {
         sponsor_uses: sponsorUses || 0,
         sponsor_name: sponsorName || null
       };
-      if (store.d.zona) {   // cada partida queda marcada con la campaña por la que entró este jugador
-        const { error } = await client.from('game_sessions').insert(Object.assign({}, row, { campaign_zone: store.d.zona.code }));
-        if (error) await client.from('game_sessions').insert(row);   // columna aún no creada: guardamos igual la partida
-      } else {
-        await client.from('game_sessions').insert(row);
-      }
+      // alarm_city_id: ciudad a la que cuenta la partida para la alarma central (GPS → ciudad más cercana).
+      // campaign_zone: campaña por la que entró este jugador. Si alguna columna todavía no existe, se guarda igual lo demás.
+      const extra = { alarm_city_id: alarmCityOf(barrioId || store.d.barrio) };
+      if (store.d.zona) extra.campaign_zone = store.d.zona.code;
+      let { error } = await client.from('game_sessions').insert(Object.assign({}, row, extra));
+      if (error && store.d.zona) ({ error } = await client.from('game_sessions').insert(Object.assign({}, row, { campaign_zone: store.d.zona.code })));
+      if (error) await client.from('game_sessions').insert(row);
     } catch (e) {}
   }
 
@@ -1409,7 +1462,7 @@ function drawBase() {
 const mScale = m => TYPES[m.type].scale * (.55 + (1 - m.dist) * 1.25);
 const mosqReach = m => (17 * mScale(m) + CFG.hitAssist) * U;
 const maxAlive = () => Math.min(12, 3 + run.level);
-const getAlarm = () => store.d.alarm[barrioId] == null ? 50 : store.d.alarm[barrioId];
+const getAlarm = () => alarmFor(barrioId);
 const spawnInterval = () => Math.max(.7, 2 - .14 * (run.level - 1) - getAlarm() / 100 * .4);
 
 function spawnMosquito() {
@@ -1609,7 +1662,7 @@ function startLevel() {
   Cam.recenter();
   state = 'PLAYING'; showScreen(null); $('hud').hidden = false; $('banner').hidden = true;
   const b = findPlace(barrioId), info = alarmInfo(getAlarm());
-  const inv = liveInvasions[barrioId];
+  const inv = invFor(barrioId);
   $('barrioTag').innerHTML = `${ico('ubicacion')} ${escHTML(b.name)} · ${tr('alarm.' + info.label)}` + (inv ? ` · <b style="color:#ffb703">🔥 ${tr('map.special')}</b>` : '');
   if (info.label === 'alta') Sound.siren(2);
   $('spName').textContent = sponsorLabel();
@@ -1701,7 +1754,7 @@ function finish(win) {
   let bonus = 0;
   if (win) {
     bonus = 500 * run.level + run.lives * 250; run.score += bonus; uiScore();
-    store.d.criaderos++; store.d.alarm[barrioId] = Math.max(0, getAlarm() - 12);
+    store.d.criaderos++; if (!serverAlarm) store.d.alarm[barrioId] = Math.max(0, getAlarm() - 12);   // con alarma central, baja sola por la suma de todos
     Sound.win(); vibrate([80, 50, 80, 50, 200]);
     const q = project(base.yaw, base.pitch);
     pfx(q.x, q.y, 40, ['#ffb703', '#e0312b', '#fff', '#8dff4a'], 380, .9, 7);
@@ -1712,7 +1765,7 @@ function finish(win) {
   const rec = run.score > store.d.best; if (rec) store.d.best = run.score;
   store.save();
   run.win = win; run.bonus = bonus; run.record = rec;
-  Analytics.trackSession({ win, level: run.level, score: run.score, kills: run.kills, sponsorUses: run.sponsorUsed, sponsorName: currentSponsor().name });
+  Analytics.trackSession({ win, level: run.level, score: run.score, kills: run.kills, sponsorUses: run.sponsorUsed, sponsorName: currentSponsor().name }).then(() => loadAlarms(true));
   Analytics.upsertPlayer();
   setTimeout(() => { if (state === 'END') showResult(); }, win ? 1300 : 800);
 }
@@ -1864,7 +1917,7 @@ function recenterCountry() { const c = curCountry(); if (gmap) { gmap.panTo(c.ce
 function renderMapMarkers() {
   Object.values(gmapMarkers).forEach(m => m.setMap(null)); gmapMarkers = {};
   allPlaces().forEach(b => {
-    const a = store.d.alarm[b.id] ?? seedAlarm(b.id), info = alarmInfo(a), sel = b.id === barrioId;
+    const a = alarmFor(b.id), info = alarmInfo(a), sel = b.id === barrioId;
     const marker = new google.maps.Marker({
       position:{ lat:b.lat, lng:b.lng }, map:gmap,
       icon:{ path:google.maps.SymbolPath.CIRCLE, scale:sel ? 15 : 10, fillColor:info.color, fillOpacity:.92, strokeColor:'#fff', strokeWeight:sel ? 3 : 2 },
@@ -1896,8 +1949,8 @@ function showMapFallback() {
   $('tacticalMap').hidden = true;
   const box = $('mapFallback'); box.hidden = false;
   box.innerHTML = allPlaces().map(b => {
-    const inv = liveInvasions[b.id];
-    const a = inv ? Math.max(inv.intensity, store.d.alarm[b.id] ?? seedAlarm(b.id)) : (store.d.alarm[b.id] ?? seedAlarm(b.id));
+    const inv = invFor(b.id);
+    const a = alarmFor(b.id);
     const info = alarmInfo(a), sel = b.id === barrioId;
     const tag = inv ? ` <small style="color:#ffb703">🔥 ${inv.sponsor_name ? escHTML(inv.sponsor_name) : tr('map.special')}</small>` : '';
     return `<button class="city-btn" data-id="${b.id}" style="border-color:${sel ? '#ffd23f' : (inv ? '#ffb703' : '#fff')};background:${info.color}26">${ico('mosquito')} ${escHTML(b.name)} <small>${tr('alarm.' + info.label)}</small>${tag}</button>`;
@@ -1905,7 +1958,7 @@ function showMapFallback() {
   [...box.querySelectorAll('.city-btn')].forEach(btn => btn.addEventListener('click', () => selectPlace(btn.dataset.id, false)));
 }
 function renderMap() {
-  const b = findPlace(barrioId), a = store.d.alarm[b.id] ?? seedAlarm(b.id), info = alarmInfo(a);
+  const b = findPlace(barrioId), a = alarmFor(b.id), info = alarmInfo(a);
   $('btnCountry').innerHTML = `${ico('mundo')} ${escHTML(curCountry().name)} ▾`;
   $('countryList').innerHTML = Object.entries(COUNTRIES).map(([code, c]) =>
     `<button class="city-btn" data-code="${code}" style="border-color:${code === store.d.country ? '#ffd23f' : '#fff'}">${c.name}</button>`
@@ -2079,7 +2132,7 @@ function updateHomeButton() {
   $('btnEditHome').textContent = h ? tr('home.button', { barrio: h.barrio, city: hc }) : '';
   $('btnEditHome').hidden = !h;
 }
-function openMap() { state = 'MAP'; $('hud').hidden = true; renderMap(); showScreen('map'); }
+function openMap() { state = 'MAP'; $('hud').hidden = true; renderMap(); showScreen('map'); loadAlarms(); }
 function toMenu() { state = 'MENU'; $('hud').hidden = true; $('banner').hidden = true; refreshMenu(); showScreen('menu'); }
 /* ---------------------- INTRO, BIENVENIDA, REGISTRO Y CARTELES EDUCATIVOS ---------------------- */
 function goWelcome() { showScreen('welcome'); }
@@ -2259,8 +2312,10 @@ if (/[?&]debug\b/.test(location.search)) {
 }
 
 loadSponsors();
+if (store.d.srvAlarm && store.d.srvAlarm.map) { serverAlarm = store.d.srvAlarm.map; alarmDefault = store.d.srvAlarm.def != null ? store.d.srvAlarm.def : 50; }   // última alarma conocida, por si no hay internet
+loadAlarms(true);
 loadInvasions();
-setInterval(loadInvasions, 5 * 60 * 1000);
+setInterval(() => { loadAlarms(true); loadInvasions(); }, 5 * 60 * 1000);
 
 Sound.on = store.d.sound; setSoundIcon();
 try { document.fonts && document.fonts.load('20px Bungee'); } catch (e) {}
