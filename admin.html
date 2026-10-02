@@ -52,6 +52,23 @@
     #qrBox:empty { display: none; }
     .threat-level { color: var(--red); font-weight: bold; font-size: 18px; animation: blink 1s infinite alternate; }
     @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
+
+    /* ---- Control de alarma ---- */
+    .alarm-rules { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; padding:12px; border:1px dashed var(--green); margin:12px 0; }
+    .alarm-rules input { margin-right:0; text-align:center; }
+    .lvl-badge { display:inline-block; min-width:92px; text-align:center; padding:4px 8px; font-family:'Bungee',cursive; font-size:13px; color:#fff; border:2px solid #fff; }
+    .fader-wrap { min-width:240px; }
+    input.fader { -webkit-appearance:none; appearance:none; width:100%; height:14px; padding:0; margin:6px 0 4px; border:1px solid #000; border-radius:7px; cursor:pointer;
+      background:linear-gradient(90deg,#22c55e 0 34%,#f59e0b 34% 67%,#e0312b 67% 100%); }
+    input.fader::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:32px; border-radius:5px; background:#f1f1f1; border:2px solid #000; box-shadow:0 0 0 2px var(--yellow),0 2px 6px rgba(0,0,0,.8); }
+    input.fader::-moz-range-thumb { width:18px; height:30px; border-radius:5px; background:#f1f1f1; border:2px solid #000; box-shadow:0 0 0 2px var(--yellow); }
+    .fader-row { display:flex; justify-content:space-between; align-items:center; gap:6px; }
+    .fv { font-family:'Bungee',cursive; font-size:14px; }
+    .chip { background:#000; border:1px solid var(--green); color:var(--lime); font-family:inherit; font-size:10px; padding:3px 6px; cursor:pointer; margin-left:3px; }
+    .chip:hover { background:var(--green); color:#000; }
+    tr.dirty { background:rgba(255,210,63,.12); }
+    button.btn:disabled { opacity:.35; cursor:not-allowed; box-shadow:none; }
+    .tbl-scroll { overflow-x:auto; }
   </style>
 </head>
 <body>
@@ -80,14 +97,48 @@
       <label>Filtro de Territorio:</label>
       <select id="filterCountry" onchange="loadTacticalData()"></select>
       <button class="btn" onclick="loadTacticalData()">ACTUALIZAR RADAR</button>
+      <span style="margin-left:14px;">Soldado activo = visto en los últimos:</span>
+      <select id="activeDays" onchange="onActiveDaysChange()">
+        <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option><option value="90">90 días</option>
+      </select>
     </div>
 
     <!-- Métricas Globales -->
     <div class="grid">
-      <div class="card">Soldados Activos<span class="num" id="totPlayers">0</span></div>
+      <div class="card">Soldados Registrados<span class="num" id="totPlayers">0</span></div>
+      <div class="card" style="border-left-color: var(--yellow);"><span id="activeLabel">Soldados Activos (7 días)</span><span class="num" id="totActive">0</span></div>
       <div class="card">Mosquitos Eliminados<span class="num" id="totKills">0</span></div>
       <div class="card">Criaderos Neutralizados<span class="num" id="totCriaderos">0</span></div>
       <div class="card">Reclutamientos<span class="num" id="totInvites">0</span></div>
+    </div>
+
+    <!-- Control de alarma por ciudad -->
+    <div class="panel-section" style="border-color: var(--yellow);">
+      <h2>Control de Alarma por Ciudad</h2>
+      <p class="muted">El deslizador fija el nivel que ven los jugadores <b>ahora</b> (BAJA 0–33 · MEDIA 34–66 · ALTA 67–100). Desde ese momento, cada criadero destruido en la ciudad lo va bajando solo, según la regla de abajo. Si hace falta, lo volvés a subir. El nivel también define la dificultad de la partida.</p>
+      <div class="alarm-rules">
+        <span>Cada</span>
+        <input type="number" id="setPerPoint" min="1" max="1000" style="width:80px" oninput="updateRuleHint()">
+        <span>criaderos destruidos en una ciudad bajan la alarma <b>1 punto</b>.</span>
+        <span style="margin-left:10px;">Ciudades sin configurar arrancan en</span>
+        <input type="number" id="setDefault" min="0" max="100" style="width:70px">
+        <button class="btn" onclick="saveAlarmSettings()">GUARDAR REGLAS</button>
+        <div class="muted" id="ruleHint" style="flex-basis:100%;"></div>
+      </div>
+      <div style="margin: 12px 0;">
+        <label>País:</label>
+        <select id="alarmCountry" onchange="renderAlarmPanel()"></select>
+        <button class="btn" onclick="loadAlarmData()">ACTUALIZAR ALARMAS</button>
+      </div>
+      <p id="alarmSummary" style="margin:6px 0;"></p>
+      <p class="muted" id="alarmStatus"></p>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Ciudad</th><th>Soldados<br><small class="muted">activos / registrados</small></th><th>Criaderos destruidos</th><th>Nivel en el juego</th><th>Deslizador (nivel que querés fijar)</th><th></th></tr></thead>
+          <tbody id="alarmTable"></tbody>
+        </table>
+      </div>
+      <p class="muted">Soldados por ciudad: la que cada soldado <b>declaró</b>; si no declaró, la ciudad donde juega. Los criaderos de un punto de GPS cuentan para la ciudad más cercana (hasta 60 km). Una invasión activa puede mostrar un nivel más alto que el del deslizador mientras dure.</p>
     </div>
 
     <div class="grid" style="grid-template-columns: 2fr 1fr;">
@@ -137,10 +188,10 @@
       <p class="muted" id="barrioSummary">Cargando…</p>
       <button class="btn" onclick="exportBarrios()">EXPORTAR CSV</button>
       <table>
-        <thead><tr><th>Barrio</th><th>Ciudad</th><th>País</th><th>Soldados</th><th>Criaderos</th><th>Mosquitos</th></tr></thead>
+        <thead><tr><th>Barrio</th><th>Ciudad</th><th>País</th><th>Soldados</th><th>Activos</th><th>Criaderos</th><th>Mosquitos</th></tr></thead>
         <tbody id="barrioTable"></tbody>
       </table>
-      <p class="muted">Cuenta a cada soldado en el barrio que <b>declaró</b> al sumarse (no donde juega). "Barrio" es texto libre: se agrupan variantes de mayúsculas, tildes y espacios. Sigue el filtro de territorio de arriba (por país declarado).</p>
+      <p class="muted">Cuenta a cada soldado en el barrio que <b>declaró</b> al sumarse (no donde juega). "Barrio" es texto libre: se agrupan variantes de mayúsculas, tildes y espacios. Sigue el filtro de territorio de arriba (por país declarado). <b>Activos</b>: soldados vistos en la ventana de días elegida arriba.</p>
     </div>
 
     <!-- Campañas por código de link (?zona=) -->
@@ -334,6 +385,8 @@
         Object.entries(COUNTRIES).map(([code, c]) => `<option value="${code}">${esc(c.name)}</option>`).join('');
       document.getElementById('invCountry').innerHTML =
         Object.entries(COUNTRIES).map(([code, c]) => `<option value="${code}">${esc(c.name)}</option>`).join('');
+      document.getElementById('alarmCountry').innerHTML =
+        Object.entries(COUNTRIES).map(([code, c]) => `<option value="${code}">${esc(c.name)}</option>`).join('');
       fillInvCities();
     }
     // Llena el desplegable de ciudades según el país elegido para la invasión
@@ -419,6 +472,13 @@
       const { data: all, error } = await fetchAll(ord => { const q = db.from('players').select('*'); return ord ? q.order('id') : q; });
       if (error) { alert('No se pudieron leer los jugadores: ' + error.message + '\n(Si dice "permission denied" o viene vacío, falta una política RLS de lectura para usuarios autenticados en la tabla players.)'); return; }
       PLAYERS = all;
+      if (countryFilter !== 'ALL' && COUNTRIES[countryFilter]) document.getElementById('alarmCountry').value = countryFilter;   // el control de alarma sigue al filtro de país
+      renderTactical();
+    }
+
+    function renderTactical() {
+      const countryFilter = document.getElementById('filterCountry').value;
+      const all = PLAYERS;
 
       // Métricas y ranking: por país donde JUEGAN (como antes)
       const players = all.filter(p => countryFilter === 'ALL' || p.country === countryFilter)
@@ -440,13 +500,16 @@
           </tr>`;
         }
       });
-      document.getElementById('totPlayers').innerText = players.length;
+      document.getElementById('totPlayers').innerText = players.length.toLocaleString();
+      document.getElementById('totActive').innerText = players.filter(isActive).length.toLocaleString();
       document.getElementById('totKills').innerText = kills.toLocaleString();
       document.getElementById('totCriaderos').innerText = criaderos.toLocaleString();
       document.getElementById('totInvites').innerText = invites.toLocaleString();
       document.getElementById('topSoldiersTable').innerHTML = tbody;
 
       renderBarrios(countryFilter);
+      indexSoldiers();
+      renderAlarmPanel();
     }
 
     // ALCANCE POR BARRIO: por país/ciudad/barrio DECLARADO (no por dónde juega)
@@ -457,8 +520,8 @@
       declared.forEach(p => {
         const city = p.home_city || cityName(p.home_country, p.home_city_id);
         const key = [p.home_country, normKey(city), normKey(p.home_barrio)].join('|');
-        const g = groups[key] || (groups[key] = { country: p.home_country, city, labels: {}, n: 0, criaderos: 0, kills: 0 });
-        g.n++; g.criaderos += p.total_criaderos || 0; g.kills += p.total_kills || 0;
+        const g = groups[key] || (groups[key] = { country: p.home_country, city, labels: {}, n: 0, active: 0, criaderos: 0, kills: 0 });
+        g.n++; if (isActive(p)) g.active++; g.criaderos += p.total_criaderos || 0; g.kills += p.total_kills || 0;
         g.labels[p.home_barrio] = (g.labels[p.home_barrio] || 0) + 1;
       });
       BARRIO_ROWS = Object.values(groups).map(g => {
@@ -472,13 +535,13 @@
                                  : ` · ${(totalAll).toLocaleString()} juegan en este país en total.`);
       document.getElementById('barrioTable').innerHTML = BARRIO_ROWS.slice(0, 50).map(g => `<tr>
           <td><strong>${esc(g.barrio)}</strong></td><td>${esc(g.city)}</td><td>${esc(g.country || '')}</td>
-          <td>${g.n}</td><td>${g.criaderos}</td><td>${g.kills}</td></tr>`).join('') ||
-        '<tr><td colspan="6" style="color:#666;">Todavía nadie declaró su barrio.</td></tr>';
+          <td>${g.n}</td><td><b>${g.active}</b></td><td>${g.criaderos}</td><td>${g.kills}</td></tr>`).join('') ||
+        '<tr><td colspan="7" style="color:#666;">Todavía nadie declaró su barrio.</td></tr>';
     }
     function exportBarrios() {
       if (!BARRIO_ROWS.length) return alert('No hay barrios para exportar.');
-      downloadCsv('barrios-aedes-attack.csv', [['Barrio', 'Ciudad', 'País', 'Soldados', 'Criaderos', 'Mosquitos']]
-        .concat(BARRIO_ROWS.map(g => [g.barrio, g.city, g.country, g.n, g.criaderos, g.kills])));
+      downloadCsv('barrios-aedes-attack.csv', [['Barrio', 'Ciudad', 'País', 'Soldados', 'Activos', 'Criaderos', 'Mosquitos']]
+        .concat(BARRIO_ROWS.map(g => [g.barrio, g.city, g.country, g.n, g.active, g.criaderos, g.kills])));
     }
 
     // CAMPAÑAS (?zona=codigo)
@@ -552,6 +615,7 @@
         list = '<li style="color:#666;">Zonas seguras. Ninguna invasión programada.</li>';
       }
       document.getElementById('activeInvasionsList').innerHTML = list;
+      loadAlarmData();   // las invasiones activas también se muestran en el control de alarma
     }
 
     async function launchInvasion() {
@@ -627,6 +691,159 @@
         await db.from('country_sponsors').delete().eq('country_code', code);
         loadSponsorsTable();
       }
+    }
+
+    // ================= SOLDADOS ACTIVOS =================
+    const ALL_CITY_IDS = new Set(Object.values(COUNTRIES).flatMap(c => c.cities.map(x => x.id)));
+    try { const d = localStorage.getItem('adm.activeDays'); if (d) document.getElementById('activeDays').value = d; } catch (e) {}
+    const activeDays = () => parseInt(document.getElementById('activeDays').value) || 7;
+    function isActive(p) {
+      const t = p.last_seen ? Date.parse(p.last_seen) : NaN;
+      return !isNaN(t) && (Date.now() - t) <= activeDays() * 864e5;
+    }
+    function onActiveDaysChange() {
+      try { localStorage.setItem('adm.activeDays', String(activeDays())); } catch (e) {}
+      document.getElementById('activeLabel').textContent = 'Soldados Activos (' + activeDays() + ' días)';
+      renderTactical();
+    }
+    document.getElementById('activeLabel').textContent = 'Soldados Activos (' + activeDays() + ' días)';
+
+    // Ciudad de cada soldado: la que declaró; si no declaró, la ciudad de la lista donde juega
+    function playerCityId(p) {
+      if (p.home_city_id && ALL_CITY_IDS.has(p.home_city_id)) return p.home_city_id;
+      if (!p.home_city_id && p.city_id && ALL_CITY_IDS.has(p.city_id)) return p.city_id;
+      return null;
+    }
+    let SOLDIERS_BY_CITY = {};
+    function indexSoldiers() {
+      SOLDIERS_BY_CITY = {};
+      PLAYERS.forEach(p => {
+        const id = playerCityId(p); if (!id) return;
+        const s = SOLDIERS_BY_CITY[id] || (SOLDIERS_BY_CITY[id] = { total: 0, active: 0 });
+        s.total++; if (isActive(p)) s.active++;
+      });
+    }
+
+    // ================= CONTROL DE ALARMA =================
+    const lvlInfo = a => a >= 67 ? { key: 'ALTA', color: '#e0312b' } : a >= 34 ? { key: 'MEDIA', color: '#f59e0b' } : { key: 'BAJA', color: '#22c55e' };
+    let ALARM = { ready: false, settings: { criaderos_per_point: 5, default_level: 50 }, live: {}, totals: {}, invasions: {} };
+
+    async function loadAlarmData() {
+      const status = document.getElementById('alarmStatus');
+      const nowIso = new Date().toISOString();
+      const [s, l, t, i] = await Promise.all([
+        db.from('alarm_settings').select('*').eq('id', 1).maybeSingle(),
+        db.from('city_alarm_live').select('*'),
+        db.from('city_criaderos').select('*'),
+        db.from('active_invasions').select('city_id,intensity,sponsor_name').eq('active', true).lte('scheduled_at', nowIso)
+      ]);
+      const err = s.error || l.error || t.error;
+      if (err) {
+        ALARM.ready = false;
+        status.style.color = 'var(--red)';
+        status.textContent = 'No se pudo leer la alarma: ' + err.message + ' — ¿corriste supabase_alarmas.sql en el SQL Editor de Supabase?';
+        renderAlarmPanel(); return;
+      }
+      status.style.color = ''; status.textContent = '';
+      ALARM.ready = true;
+      if (s.data) ALARM.settings = s.data;
+      ALARM.live = {}; (l.data || []).forEach(r => { ALARM.live[r.city_id] = r; });
+      ALARM.totals = {}; (t.data || []).forEach(r => { ALARM.totals[r.city_id] = r.total || 0; });
+      ALARM.invasions = {};
+      ((i && i.data) || []).forEach(r => { const cur = ALARM.invasions[r.city_id]; if (!cur || r.intensity > cur.intensity) ALARM.invasions[r.city_id] = r; });
+      document.getElementById('setPerPoint').value = ALARM.settings.criaderos_per_point;
+      document.getElementById('setDefault').value = ALARM.settings.default_level;
+      updateRuleHint();
+      renderAlarmPanel();
+    }
+
+    function updateRuleHint() {
+      const n = Math.max(1, parseInt(document.getElementById('setPerPoint').value) || 1);
+      document.getElementById('ruleHint').textContent =
+        `Con ${n} criaderos por punto: 100 criaderos bajan ${Math.floor(100 / n)} puntos · un nivel completo (≈33 puntos) necesita unos ${(33 * n).toLocaleString()} criaderos. ` +
+        'Cambiar la regla recalcula YA el nivel de todas las ciudades con lo destruido desde su último ajuste.';
+    }
+
+    async function saveAlarmSettings() {
+      const per = parseInt(document.getElementById('setPerPoint').value);
+      const def = parseInt(document.getElementById('setDefault').value);
+      if (!(per >= 1) || !(def >= 0 && def <= 100)) return alert('Poné un número de 1 o más en "criaderos por punto" y un nivel inicial entre 0 y 100.');
+      if (!confirm(`Cada ${per} criaderos bajarán 1 punto de alarma, y las ciudades sin configurar arrancarán en ${def}.\n\nEsto cambia al instante el nivel de TODAS las ciudades. ¿Guardar?`)) return;
+      const { data, error } = await db.from('alarm_settings').upsert({ id: 1, criaderos_per_point: per, default_level: def, updated_at: new Date().toISOString() }).select();
+      if (error) return alert('No se pudieron guardar las reglas: ' + error.message);
+      if (!data || !data.length) return alert('Supabase no permitió guardar (falta la política de escritura para usuarios logueados). Corré supabase_alarmas.sql y probá de nuevo.');
+      loadAlarmData();
+    }
+
+    function renderAlarmPanel() {
+      const tbody = document.getElementById('alarmTable');
+      const cc = document.getElementById('alarmCountry').value || 'PY';
+      const cities = (COUNTRIES[cc] || COUNTRIES.PY).cities;
+      if (!ALARM.ready) { tbody.innerHTML = '<tr><td colspan="6" style="color:#666;">Sin datos de alarma todavía.</td></tr>'; document.getElementById('alarmSummary').textContent = ''; return; }
+      const cnt = { ALTA: 0, MEDIA: 0, BAJA: 0 };
+      let act = 0, tot = 0;
+      tbody.innerHTML = cities.map(c => {
+        const live = ALARM.live[c.id];
+        const total = ALARM.totals[c.id] || 0;
+        const level = live ? live.level : ALARM.settings.default_level;
+        const inv = ALARM.invasions[c.id];
+        const shown = inv ? Math.max(level, inv.intensity) : level;
+        const L = lvlInfo(shown), LF = lvlInfo(level);
+        cnt[L.key]++;
+        const sold = SOLDIERS_BY_CITY[c.id] || { total: 0, active: 0 };
+        act += sold.active; tot += sold.total;
+        const since = live ? Math.max(0, total - live.criaderos_at_set) : 0;
+        const detail = live
+          ? `base ${live.base_level} − ${live.base_level - level} por ${since.toLocaleString()} criaderos`
+          : 'sin configurar (nivel inicial)';
+        const id = esc(c.id);
+        return `<tr data-city="${id}">
+          <td><strong>${esc(c.name)}</strong></td>
+          <td><b>${sold.active.toLocaleString()}</b> / ${sold.total.toLocaleString()}</td>
+          <td><b>${total.toLocaleString()}</b>${live ? `<br><small class="muted">desde el último ajuste: ${since.toLocaleString()}</small>` : ''}</td>
+          <td><span class="lvl-badge" style="background:${L.color};">${shown} · ${L.key}</span>
+              <br><small class="muted">${esc(detail)}</small>
+              ${inv ? `<br><small style="color:var(--yellow);">🔥 invasión activa ${inv.intensity}%${inv.sponsor_name ? ' · ' + esc(inv.sponsor_name) : ''}</small>` : ''}</td>
+          <td><div class="fader-wrap">
+              <input type="range" class="fader" min="0" max="100" step="1" value="${level}" data-city="${id}" data-orig="${level}" oninput="onFader(this)">
+              <div class="fader-row">
+                <span class="fv" id="fv-${id}" style="color:${LF.color};">${level} · ${LF.key}</span>
+                <span><button type="button" class="chip" onclick="setFader('${id}',20)">BAJA</button><button type="button" class="chip" onclick="setFader('${id}',50)">MEDIA</button><button type="button" class="chip" onclick="setFader('${id}',85)">ALTA</button></span>
+              </div></div></td>
+          <td><button class="btn" id="fb-${id}" disabled onclick="applyAlarm('${id}','${esc(cc)}')">APLICAR</button></td>
+        </tr>`;
+      }).join('');
+      document.getElementById('alarmSummary').innerHTML =
+        `<span style="color:#e0312b;">● ${cnt.ALTA} en ALTA</span> &nbsp; <span style="color:#f59e0b;">● ${cnt.MEDIA} en MEDIA</span> &nbsp; <span style="color:#22c55e;">● ${cnt.BAJA} en BAJA</span>` +
+        ` &nbsp;·&nbsp; Soldados en estas ciudades: <b>${act.toLocaleString()}</b> activos / ${tot.toLocaleString()} registrados`;
+    }
+
+    function onFader(el) {
+      const id = el.dataset.city, v = parseInt(el.value), L = lvlInfo(v);
+      const fv = document.getElementById('fv-' + id); fv.textContent = v + ' · ' + L.key; fv.style.color = L.color;
+      const changed = v !== parseInt(el.dataset.orig);
+      document.getElementById('fb-' + id).disabled = !changed;
+      el.closest('tr').classList.toggle('dirty', changed);
+    }
+    function setFader(id, v) {
+      const el = document.querySelector(`input.fader[data-city="${id}"]`); if (!el) return;
+      el.value = v; onFader(el);
+    }
+
+    async function applyAlarm(cityId, countryCode) {
+      const el = document.querySelector(`input.fader[data-city="${cityId}"]`); if (!el) return;
+      const val = parseInt(el.value);
+      const btn = document.getElementById('fb-' + cityId); btn.disabled = true;
+      // criaderos de la ciudad AL MOMENTO de aplicar: lo destruido antes no baja el nivel que ponés ahora
+      const t = await db.from('city_criaderos').select('total').eq('city_id', cityId).maybeSingle();
+      if (t.error) { alert('No se pudo leer los criaderos de la ciudad: ' + t.error.message); btn.disabled = false; return; }
+      const { data, error } = await db.from('city_alarm').upsert({
+        city_id: cityId, country: countryCode, base_level: val,
+        criaderos_at_set: (t.data && t.data.total) || 0, set_at: new Date().toISOString()
+      }, { onConflict: 'city_id' }).select();
+      if (error) { alert('No se pudo guardar la alarma: ' + error.message); btn.disabled = false; return; }
+      if (!data || !data.length) { alert('Supabase no permitió guardar (falta la política de escritura para usuarios logueados). Corré supabase_alarmas.sql y probá de nuevo.'); btn.disabled = false; return; }
+      loadAlarmData();
     }
 
     // Inicializar
